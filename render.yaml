@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: fieldtrack
+    runtime: node
+    plan: starter          # disks are not available on the free plan
+    region: frankfurt
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /
+    disk:
+      name: fieldtrack-data
+      mountPath: /data
+      sizeGB: 5
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DB_FILE
+        value: /data/fieldtrack.db
+      - key: UPLOAD_DIR
+        value: /data/uploads
+      - key: JWT_SECRET
+        generateValue: true
