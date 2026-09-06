@@ -508,11 +508,23 @@ function readingForm(s) {
 function equipCard(e) {
   const chip = e.status === "overdue" ? `<span class="chip alert">overdue</span>`
     : e.status === "due_soon" ? `<span class="chip warn">due soon</span>` : `<span class="chip ok">ok</span>`;
-  const card = $(`<div class="card"><div class="row">
-    <div><div class="name" style="font-size:14.5px">${esc(e.name)}</div>
+  const card = $(`<div class="card"><div class="row" style="align-items:flex-start"></div></div>`);
+  const row = card.firstChild;
+  const left = $(`<div class="row" style="gap:11px;align-items:flex-start"></div>`);
+  const box = $(`<button type="button" class="box ${e.checked?"on":""}" style="margin-top:2px" aria-label="Checked present and working">${e.checked?"✓":""}</button>`);
+  if (me.role === "officer") box.disabled = true;
+  else box.onclick = async () => {
+    try { await api(`/api/equipment/${e.id}/check`, { method:"POST", body:{ checked: !e.checked } }); render(); }
+    catch (er) { err(er.message); }
+  };
+  const info = $(`<div>
+    <div class="name" style="font-size:14.5px">${esc(e.name)}</div>
     <div class="meta">${[e.make,e.model,e.serial].filter(Boolean).map(esc).join(" · ") || "No details"}</div>
     <div class="meta">${e.service_due ? "Service due " + esc(e.service_due) : "No service schedule"}${e.calibration_due ? " · Calibration due " + esc(e.calibration_due) : ""}</div>
-    </div>${chip}</div></div>`);
+    <div class="meta">${e.checked ? `Checked by ${esc(e.checked_by)} · ${esc(e.checked_at)}` : "Not checked yet"}</div>
+  </div>`);
+  left.append(box, info);
+  row.append(left, $(chip));
   if (me.role !== "officer") {
     const b = $(`<button class="btn ghost slim" style="margin-top:10px">Mark serviced today</button>`);
     b.onclick = async () => {

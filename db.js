@@ -68,6 +68,9 @@ CREATE TABLE IF NOT EXISTS equipment (
   service_days    INTEGER,        -- service interval in days
   calibration_due TEXT,
   notes           TEXT,
+  checked         INTEGER NOT NULL DEFAULT 0,  -- verified present & working, independent of service/calibration dates
+  checked_at      TEXT,
+  checked_by      TEXT,
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -147,6 +150,16 @@ CREATE INDEX IF NOT EXISTS idx_readings_site  ON readings(site_id, taken_on DESC
 CREATE INDEX IF NOT EXISTS idx_equipment_site ON equipment(site_id);
 CREATE INDEX IF NOT EXISTS idx_stages_site    ON stages(site_id);
 `);
+
+// Databases created before the equipment checkbox existed won't have these columns yet.
+const equipCols = db.prepare("PRAGMA table_info(equipment)").all().map((c) => c.name);
+if (!equipCols.includes("checked")) {
+  db.exec(`
+    ALTER TABLE equipment ADD COLUMN checked INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE equipment ADD COLUMN checked_at TEXT;
+    ALTER TABLE equipment ADD COLUMN checked_by TEXT;
+  `);
+}
 
 /* ---------------------------------------------------------------- */
 /*  Site types — the built-ins from templates.js, plus whatever      */
@@ -265,6 +278,7 @@ function equipmentFor(orgId, siteId) {
     const worst = [svc, cal].filter((x) => x != null).sort((a, b) => a - b)[0];
     return {
       ...e,
+      checked: !!e.checked,
       service_due: serviceDue,
       service_in_days: svc,
       calibration_in_days: cal,

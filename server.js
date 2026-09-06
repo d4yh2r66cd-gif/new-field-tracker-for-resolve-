@@ -301,6 +301,18 @@ app.patch("/api/equipment/:id", auth, requireRole("owner", "lead", "tech"), (req
   res.json(equipmentFor(req.org, e.site_id));
 });
 
+app.post("/api/equipment/:id/check", auth, requireRole("owner", "lead", "tech"), (req, res) => {
+  const e = db.prepare("SELECT site_id FROM equipment WHERE id = ? AND org_id = ?").get(req.params.id, req.org);
+  if (!e) return res.status(404).json({ error: "No such equipment." });
+  const checked = req.body && req.body.checked ? 1 : 0;
+  db.prepare(
+    `UPDATE equipment SET checked=?, checked_at = CASE WHEN ?=1 THEN date('now') ELSE NULL END,
+     checked_by = CASE WHEN ?=1 THEN ? ELSE NULL END
+     WHERE id=? AND org_id=?`
+  ).run(checked, checked, checked, req.user.name, req.params.id, req.org);
+  res.json(equipmentFor(req.org, e.site_id));
+});
+
 app.delete("/api/equipment/:id", auth, requireRole("owner", "lead"), (req, res) => {
   const e = db.prepare("SELECT * FROM equipment WHERE id = ? AND org_id = ?").get(req.params.id, req.org);
   if (!e) return res.status(404).json({ error: "No such equipment." });

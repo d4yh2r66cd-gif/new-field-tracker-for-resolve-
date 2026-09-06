@@ -20,7 +20,8 @@ flagged readings appear in the next progress update without anyone having to rem
 
 - **Stage checklist** — the commissioning sequence for that type, ticked off with who and when.
 - **Equipment register** — make, model, serial, service interval and calibration due date, with
-  status turning to *due soon* at 30 days and *overdue* past the date.
+  status turning to *due soon* at 30 days and *overdue* past the date. Each item also has a
+  check-box for "present and working", recording who checked it and when.
 - **Daily activity log** — work done, crew size, hours, issues, and up to 6 photos per entry.
 - **Readings** — the parameters for that site type, timestamped and attributable.
 
@@ -84,6 +85,7 @@ POST   /api/sites/:siteId/stages/:idx   { done: true|false }
 GET    /api/sites/:siteId/equipment
 POST   /api/sites/:siteId/equipment
 PATCH  /api/equipment/:id            e.g. { last_service: "2026-09-05" }
+POST   /api/equipment/:id/check      { checked: true|false } — present & working, with who/when
 DELETE /api/equipment/:id            owner/lead
 GET    /api/equipment/due            everything due or overdue, across all sites
 
