@@ -3,9 +3,9 @@
 Field activity tracking across many sites and sectors. Each organisation keeps its own sites,
 people and records, fully separated from every other organisation on the same server.
 
-Each site is created with a **type**, and the type decides what the site tracks:
+Each site is created with a **type**, and the type decides what its equipment tracks:
 
-| Site type | Stages | Readings it expects |
+| Site type | Stages per equipment item | Readings it expects |
 | --- | --- | --- |
 | Agro-processing plant | 10 | Throughput, moisture, dryer temperature, current |
 | Meteorological station | 10 | Air temperature, humidity, pressure, wind, rainfall, battery |
@@ -18,10 +18,12 @@ flagged readings appear in the next progress update without anyone having to rem
 
 ## What each site holds
 
-- **Stage checklist** — the commissioning sequence for that type, ticked off with who and when.
-- **Equipment register** — make, model, serial, service interval and calibration due date, with
-  status turning to *due soon* at 30 days and *overdue* past the date. Each item also has a
-  check-box for "present and working", recording who checked it and when.
+- **Equipment register** — every machine on site (a hydraulic press, a dryer, a mast) gets its
+  own commissioning checklist, drawn from the site's type, ticked off independently with who and
+  when. It also carries make, model, serial, service interval and calibration due date, with
+  status turning to *due soon* at 30 days and *overdue* past the date, plus a check-box for
+  "present and working". A site's overall progress is the average across whatever equipment it
+  has — nothing to add yet means 0%, not blocked.
 - **Daily activity log** — work done, crew size, hours, issues, and up to 6 photos per entry.
 - **Readings** — the parameters for that site type, timestamped and attributable.
 
@@ -75,17 +77,17 @@ GET    /api/me                       user + organisation (join code for owners)
 GET    /api/users
 PATCH  /api/users/:id/role           owner only
 
-GET    /api/sites                    all sites with progress
-POST   /api/sites                    owner/lead; creates the type's stage checklist
-GET    /api/sites/:id                site + stages + equipment + readings + logs
+GET    /api/sites                    all sites with equipment and progress
+POST   /api/sites                    owner/lead
+GET    /api/sites/:id                site + equipment (each with its own stages) + readings + logs
 PATCH  /api/sites/:id                rename, relocate, set status
 DELETE /api/sites/:id                owner only
-POST   /api/sites/:siteId/stages/:idx   { done: true|false }
 
 GET    /api/sites/:siteId/equipment
-POST   /api/sites/:siteId/equipment
+POST   /api/sites/:siteId/equipment      creates the site type's stage checklist for this item
 PATCH  /api/equipment/:id            e.g. { last_service: "2026-09-05" }
 POST   /api/equipment/:id/check      { checked: true|false } — present & working, with who/when
+POST   /api/equipment/:id/stages/:idx    { done: true|false }
 DELETE /api/equipment/:id            owner/lead
 GET    /api/equipment/due            everything due or overdue, across all sites
 
@@ -121,8 +123,8 @@ The five built-in types (agro-processing, meteorological, petroleum, cold chain,
 typically only worth doing for a type common enough to ship by default — copy an existing block,
 change the label, stages and readings, and it appears everywhere with no other changes.
 
-Either way, existing sites keep the stages they were created with, so editing a template never
-disturbs work already under way.
+Either way, a stage checklist is only ever handed out when a piece of equipment is added, so
+editing a template never disturbs the checklists already ticked off on existing equipment.
 
 ## Security notes
 

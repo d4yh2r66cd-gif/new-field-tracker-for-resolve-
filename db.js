@@ -43,18 +43,6 @@ CREATE TABLE IF NOT EXISTS sites (
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS stages (
-  id        INTEGER PRIMARY KEY AUTOINCREMENT,
-  org_id    INTEGER NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
-  site_id   INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
-  idx       INTEGER NOT NULL,
-  name      TEXT NOT NULL,
-  done      INTEGER NOT NULL DEFAULT 0,
-  done_at   TEXT,
-  done_by   TEXT,
-  UNIQUE (site_id, idx)
-);
-
 CREATE TABLE IF NOT EXISTS equipment (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   org_id          INTEGER NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
@@ -72,6 +60,20 @@ CREATE TABLE IF NOT EXISTS equipment (
   checked_at      TEXT,
   checked_by      TEXT,
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- The commissioning checklist belongs to a piece of equipment, not the site —
+-- a site with five machines has five independent checklists.
+CREATE TABLE IF NOT EXISTS equipment_stages (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  org_id        INTEGER NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  equipment_id  INTEGER NOT NULL REFERENCES equipment(id) ON DELETE CASCADE,
+  idx           INTEGER NOT NULL,
+  name          TEXT NOT NULL,
+  done          INTEGER NOT NULL DEFAULT 0,
+  done_at       TEXT,
+  done_by       TEXT,
+  UNIQUE (equipment_id, idx)
 );
 
 CREATE TABLE IF NOT EXISTS logs (
@@ -148,7 +150,7 @@ CREATE INDEX IF NOT EXISTS idx_sites_org      ON sites(org_id);
 CREATE INDEX IF NOT EXISTS idx_logs_org_date  ON logs(org_id, entry_date DESC);
 CREATE INDEX IF NOT EXISTS idx_readings_site  ON readings(site_id, taken_on DESC);
 CREATE INDEX IF NOT EXISTS idx_equipment_site ON equipment(site_id);
-CREATE INDEX IF NOT EXISTS idx_stages_site    ON stages(site_id);
+CREATE INDEX IF NOT EXISTS idx_equipment_stages_equip ON equipment_stages(equipment_id);
 `);
 
 // Databases created before the equipment checkbox existed won't have these columns yet.
@@ -218,20 +220,20 @@ function createSiteType(orgId, { key, label, accent, stages, readings }) {
 function siteWithStages(orgId, siteId) {
   const s = db.prepare("SELECT * FROM sites WHERE id = ? AND org_id = ?").get(siteId, orgId);
   if (!s) return null;
-  s.stages = db
-    .prepare("SELECT idx, name, done, done_at, done_by FROM stages WHERE site_id = ? ORDER BY idx")
-    .all(siteId)
-    .map((x) => ({ ...x, done: !!x.done }));
-  s.percent = s.stages.length
-    ? Math.round((s.stages.filter((x) => x.done).length / s.stages.length) * 100)
-    : 0;
   const type = typeOf(orgId, s.site_type);
   s.type_label = type.label;
   s.accent = type.accent;
   s.open_blockers = db
     .prepare("SELECT COUNT(*) c FROM logs WHERE site_id = ? AND severity='blocker' AND resolved=0")
     .get(siteId).c;
-  s.equipment_count = db.prepare("SELECT COUNT(*) c FROM equipment WHERE site_id = ?").get(siteId).c;
+  // Progress is now per equipment item — the site's percent is the average
+  // across whatever equipment it has, and 0 with none on the register yet.
+  s.equipment = equipmentFor(orgId, siteId);
+  s.equipment_count = s.equipment.length;
+  s.equipment_done = s.equipment.filter((e) => e.percent === 100).length;
+  s.percent = s.equipment.length
+    ? Math.round(s.equipment.reduce((t, e) => t + e.percent, 0) / s.equipment.length)
+    : 0;
   return s;
 }
 
@@ -257,8 +259,8 @@ function logWithPhotos(orgId, id) {
   return l;
 }
 
-// Equipment carries derived service and calibration status so the client
-// doesn't have to recompute dates in three places.
+// Equipment carries derived service/calibration status and its own commissioning
+// checklist, so the client doesn't have to recompute any of it.
 function equipmentFor(orgId, siteId) {
   const rows = db
     .prepare("SELECT * FROM equipment WHERE org_id = ? AND site_id = ? ORDER BY name")
@@ -276,15 +278,29 @@ function equipmentFor(orgId, siteId) {
     const svc = days(serviceDue);
     const cal = days(e.calibration_due);
     const worst = [svc, cal].filter((x) => x != null).sort((a, b) => a - b)[0];
+    const stages = db
+      .prepare("SELECT idx, name, done, done_at, done_by FROM equipment_stages WHERE equipment_id = ? ORDER BY idx")
+      .all(e.id)
+      .map((x) => ({ ...x, done: !!x.done }));
+    const percent = stages.length
+      ? Math.round((stages.filter((x) => x.done).length / stages.length) * 100)
+      : 0;
     return {
       ...e,
       checked: !!e.checked,
+      stages,
+      percent,
       service_due: serviceDue,
       service_in_days: svc,
       calibration_in_days: cal,
       status: worst == null ? "ok" : worst < 0 ? "overdue" : worst <= 30 ? "due_soon" : "ok",
     };
   });
+}
+
+function createEquipmentStages(orgId, equipmentId, stageNames) {
+  const ins = db.prepare("INSERT INTO equipment_stages (org_id, equipment_id, idx, name) VALUES (?,?,?,?)");
+  stageNames.forEach((name, i) => ins.run(orgId, equipmentId, i, name));
 }
 
 function readingsFor(orgId, siteId, limit = 100) {
@@ -306,6 +322,7 @@ module.exports = {
   listSites,
   logWithPhotos,
   equipmentFor,
+  createEquipmentStages,
   readingsFor,
   typeOf,
   typeExists,

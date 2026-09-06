@@ -213,10 +213,22 @@ function chrome() {
   });
 }
 
+// Generic cell-track for any object with a .stages array — used both for a
+// single piece of equipment's own checklist and (below) for a site's roll-up.
 const trackHtml = s => {
   const first = s.stages.findIndex(x => !x.done);
   return `<div class="track">` + s.stages.map((x,i) =>
     `<div class="cell ${x.done ? "done" : i === first ? (s.open_blockers ? "blocked":"next") : ""}"></div>`).join("") + `</div>`;
+};
+
+// At the site level, each cell is one piece of equipment (done once its own
+// checklist is fully ticked) rather than one stage — a site can hold several
+// independent checklists now.
+const equipTrackHtml = s => {
+  if (!s.equipment.length) return "";
+  const first = s.equipment.findIndex(e => e.percent < 100);
+  return `<div class="track">` + s.equipment.map((e,i) =>
+    `<div class="cell ${e.percent===100 ? "done" : i === first ? (s.open_blockers ? "blocked":"next") : ""}"></div>`).join("") + `</div>`;
 };
 
 /* ---------------- sites ---------------- */
@@ -227,16 +239,16 @@ function renderSites() {
     add.onclick = () => add.replaceWith(siteForm());
     app.append(add);
   }
-  if (!state.sites.length) app.append($(`<div class="empty">No sites yet. Add the first one — pick its type and it arrives with the right checklist and readings.</div>`));
+  if (!state.sites.length) app.append($(`<div class="empty">No sites yet. Add the first one, then add its equipment — each piece gets its own checklist and readings.</div>`));
   state.sites.forEach(s => {
     const c = $(`<div class="card site tap ${s.accent}">
       <div class="row"><div>
         <div class="name">${esc(s.name)}</div>
         <div class="meta">${esc(s.type_label)}${s.location ? " · " + esc(s.location) : ""}${s.status !== "active" ? " · " + s.status.replace("_"," ") : ""}</div>
       </div><div class="num">${s.percent}%</div></div>
-      ${trackHtml(s)}
+      ${equipTrackHtml(s)}
       <div class="meta" style="margin-top:8px">
-        ${s.equipment_count} equipment${s.open_blockers ? ` · <span class="chip alert">${s.open_blockers} blocker${s.open_blockers>1?"s":""}</span>` : ""}
+        ${s.equipment_count} equipment${s.equipment_count ? ` · ${s.equipment_done} commissioned` : ""}${s.open_blockers ? ` · <span class="chip alert">${s.open_blockers} blocker${s.open_blockers>1?"s":""}</span>` : ""}
       </div></div>`);
     c.onclick = () => { view = "site"; siteId = s.id; render(); };
     app.append(c);
@@ -258,7 +270,7 @@ function siteForm() {
   const rest = $(`<div></div>`);
   const showPreview = () => {
     const ty = types.find(x => x.key === f.site_type);
-    preview.textContent = ty ? `${ty.stages.length} stage${ty.stages.length===1?"":"s"}, ${ty.readings.length} reading type${ty.readings.length===1?"":"s"}` : "";
+    preview.textContent = ty ? `Each piece of equipment added here gets a ${ty.stages.length}-stage checklist, and ${ty.readings.length} reading type${ty.readings.length===1?"":"s"} is tracked for the site.` : "";
   };
   let builder = null;
   t.onchange = e => {
@@ -326,7 +338,7 @@ function siteTypeBuilder(onCreated, onCancel) {
   dots.forEach(d => swatches.append(d));
   box.append(swatches);
 
-  box.append($(`<label>Commissioning stages</label>`));
+  box.append($(`<label>Commissioning stages (each piece of equipment gets this checklist)</label>`));
   const stagesBox = $(`<div></div>`);
   function renderStages() {
     stagesBox.innerHTML = "";
@@ -401,23 +413,7 @@ async function renderSite() {
   app.append($(`<div class="card site ${s.accent}">
     <div class="row"><div><h2 style="font-size:18px">${esc(s.name)}</h2>
     <div class="meta">${esc(s.type_label)}${s.location ? " · " + esc(s.location) : ""}${s.client ? " · " + esc(s.client) : ""}</div>
-    </div><div class="num" style="font-size:17px">${s.percent}%</div></div>${trackHtml(s)}</div>`));
-
-  // stages
-  app.append($(`<div class="hd">Stages</div>`));
-  const list = $(`<div class="card flat"></div>`);
-  s.stages.forEach(st => {
-    const b = $(`<button class="stage"><span class="idx">${st.idx+1}</span>
-      <span class="box ${st.done?"on":""}">${st.done?"✓":""}</span>
-      <span class="txt">${esc(st.name)}${st.done&&st.done_by?`<div class="when">${esc(st.done_by)} · ${esc(st.done_at)}</div>`:""}</span></button>`);
-    if (me.role === "officer") b.disabled = true;
-    else b.onclick = async () => {
-      try { await api(`/api/sites/${s.id}/stages/${st.idx}`, { method:"POST", body:{ done: !st.done } }); render(); }
-      catch (e) { err(e.message); }
-    };
-    list.append(b);
-  });
-  app.append(list);
+    </div><div class="num" style="font-size:17px">${s.percent}%</div></div>${equipTrackHtml(s)}</div>`));
 
   // readings
   app.append($(`<div class="hd">Readings</div>`));
@@ -525,6 +521,25 @@ function equipCard(e) {
   </div>`);
   left.append(box, info);
   row.append(left, $(chip));
+
+  if (e.stages.length) {
+    card.append($(`<div class="row" style="margin-top:12px"><div class="meta">Commissioning</div><div class="meta">${e.percent}%</div></div>`));
+    card.append($(trackHtml({ stages: e.stages, open_blockers: 0 })));
+    const stageList = $(`<div class="card flat" style="margin-top:8px"></div>`);
+    e.stages.forEach(st => {
+      const b = $(`<button class="stage"><span class="idx">${st.idx+1}</span>
+        <span class="box ${st.done?"on":""}">${st.done?"✓":""}</span>
+        <span class="txt">${esc(st.name)}${st.done&&st.done_by?`<div class="when">${esc(st.done_by)} · ${esc(st.done_at)}</div>`:""}</span></button>`);
+      if (me.role === "officer") b.disabled = true;
+      else b.onclick = async () => {
+        try { await api(`/api/equipment/${e.id}/stages/${st.idx}`, { method:"POST", body:{ done: !st.done } }); render(); }
+        catch (er) { err(er.message); }
+      };
+      stageList.append(b);
+    });
+    card.append(stageList);
+  }
+
   if (me.role !== "officer") {
     const b = $(`<button class="btn ghost slim" style="margin-top:10px">Mark serviced today</button>`);
     b.onclick = async () => {
@@ -538,6 +553,7 @@ function equipCard(e) {
 
 function equipForm(s) {
   const box = $(`<div class="card"></div>`), f = {};
+  box.append($(`<p class="note">It'll arrive with ${s.type_label}'s commissioning checklist, ready to tick off.</p>`));
   [["name","Equipment name"],["make","Make"],["model","Model"],["serial","Serial number"]].forEach(([k,l]) => {
     box.append($(`<label>${l}</label>`));
     const i = $(`<input>`); i.oninput = e => f[k] = e.target.value; box.append(i);

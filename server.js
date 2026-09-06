@@ -10,7 +10,7 @@ const jwt = require("jsonwebtoken");
 const multer = require("multer");
 
 const {
-  db, siteWithStages, listSites, logWithPhotos, equipmentFor, readingsFor,
+  db, siteWithStages, listSites, logWithPhotos, equipmentFor, createEquipmentStages, readingsFor,
   typeOf, typeExists, outOfRange, listSiteTypes, createSiteType,
 } = require("./db");
 
@@ -207,21 +207,15 @@ app.post("/api/sites", auth, requireRole("owner", "lead"), (req, res) => {
   if (!name) return res.status(400).json({ error: "Give the site a name." });
   const type = typeExists(req.org, site_type) ? site_type : "general";
 
-  const create = db.transaction(() => {
-    const s = db
-      .prepare("INSERT INTO sites (org_id, name, site_type, location, client, start_date) VALUES (?,?,?,?,?,?)")
-      .run(req.org, name.trim(), type, location || "", client || "", start_date || todayStr());
-    const ins = db.prepare("INSERT INTO stages (org_id, site_id, idx, name) VALUES (?,?,?,?)");
-    typeOf(req.org, type).stages.forEach((label, i) => ins.run(req.org, s.lastInsertRowid, i, label));
-    return s.lastInsertRowid;
-  });
+  const id = db
+    .prepare("INSERT INTO sites (org_id, name, site_type, location, client, start_date) VALUES (?,?,?,?,?,?)")
+    .run(req.org, name.trim(), type, location || "", client || "", start_date || todayStr()).lastInsertRowid;
 
-  res.json(siteWithStages(req.org, create()));
+  res.json(siteWithStages(req.org, id));
 });
 
 app.get("/api/sites/:id", auth, ownSite, (req, res) => {
   const site = siteWithStages(req.org, req.siteId);
-  site.equipment = equipmentFor(req.org, req.siteId);
   site.readings = readingsFor(req.org, req.siteId, 40);
   site.reading_defs = typeOf(req.org, site.site_type).readings;
   site.logs = db
@@ -245,19 +239,6 @@ app.patch("/api/sites/:id", auth, requireRole("owner", "lead"), ownSite, (req, r
   res.json(siteWithStages(req.org, req.siteId));
 });
 
-app.post("/api/sites/:siteId/stages/:idx", auth, requireRole("owner", "lead", "tech"), ownSite, (req, res) => {
-  const done = req.body && req.body.done ? 1 : 0;
-  const info = db
-    .prepare(
-      `UPDATE stages SET done=?, done_at = CASE WHEN ?=1 THEN date('now') ELSE NULL END,
-       done_by = CASE WHEN ?=1 THEN ? ELSE NULL END
-       WHERE site_id=? AND idx=? AND org_id=?`
-    )
-    .run(done, done, done, req.user.name, req.siteId, req.params.idx, req.org);
-  if (!info.changes) return res.status(404).json({ error: "No such stage." });
-  res.json(siteWithStages(req.org, req.siteId));
-});
-
 app.delete("/api/sites/:id", auth, requireRole("owner"), ownSite, (req, res) => {
   db.prepare("DELETE FROM sites WHERE id = ? AND org_id = ?").run(req.siteId, req.org);
   res.json({ ok: true });
@@ -274,15 +255,41 @@ app.get("/api/sites/:siteId/equipment", auth, ownSite, (req, res) =>
 app.post("/api/sites/:siteId/equipment", auth, requireRole("owner", "lead", "tech"), ownSite, (req, res) => {
   const b = req.body || {};
   if (!b.name) return res.status(400).json({ error: "Give the equipment a name." });
-  db.prepare(
-    `INSERT INTO equipment (org_id, site_id, name, make, model, serial, installed_on,
-     last_service, service_days, calibration_due, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?)`
-  ).run(
-    req.org, req.siteId, b.name.trim(), b.make || "", b.model || "", b.serial || "",
-    b.installed_on || null, b.last_service || null,
-    b.service_days ? Number(b.service_days) : null, b.calibration_due || null, b.notes || ""
-  );
+  const site = db.prepare("SELECT site_type FROM sites WHERE id = ?").get(req.siteId);
+
+  const create = db.transaction(() => {
+    const id = db
+      .prepare(
+        `INSERT INTO equipment (org_id, site_id, name, make, model, serial, installed_on,
+         last_service, service_days, calibration_due, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+      )
+      .run(
+        req.org, req.siteId, b.name.trim(), b.make || "", b.model || "", b.serial || "",
+        b.installed_on || null, b.last_service || null,
+        b.service_days ? Number(b.service_days) : null, b.calibration_due || null, b.notes || ""
+      ).lastInsertRowid;
+    // New equipment gets the site type's commissioning checklist as its own,
+    // independent progress — a site with several machines tracks each one separately.
+    createEquipmentStages(req.org, id, typeOf(req.org, site.site_type).stages);
+  });
+  create();
+
   res.json(equipmentFor(req.org, req.siteId));
+});
+
+app.post("/api/equipment/:id/stages/:idx", auth, requireRole("owner", "lead", "tech"), (req, res) => {
+  const e = db.prepare("SELECT id, site_id FROM equipment WHERE id = ? AND org_id = ?").get(req.params.id, req.org);
+  if (!e) return res.status(404).json({ error: "No such equipment." });
+  const done = req.body && req.body.done ? 1 : 0;
+  const info = db
+    .prepare(
+      `UPDATE equipment_stages SET done=?, done_at = CASE WHEN ?=1 THEN date('now') ELSE NULL END,
+       done_by = CASE WHEN ?=1 THEN ? ELSE NULL END
+       WHERE equipment_id=? AND idx=?`
+    )
+    .run(done, done, done, req.user.name, e.id, req.params.idx);
+  if (!info.changes) return res.status(404).json({ error: "No such stage." });
+  res.json(equipmentFor(req.org, e.site_id));
 });
 
 app.patch("/api/equipment/:id", auth, requireRole("owner", "lead", "tech"), (req, res) => {
@@ -443,9 +450,12 @@ function buildDraft(orgId, user, siteId) {
   out.push(`${org.name} — field progress to ${todayStr()}`);
   out.push("");
   sites.forEach((s) => {
-    const next = s.stages.find((x) => !x.done);
+    const pending = s.equipment.find((e) => e.percent < 100);
+    const next = pending && pending.stages.find((x) => !x.done);
+    const line = next ? `Next: ${pending.name} — ${next.name.toLowerCase()}`
+      : s.equipment.length ? "All equipment commissioned" : "No equipment on the register yet";
     out.push(`${s.name} (${s.type_label}) — ${s.percent}%`);
-    out.push(`  ${next ? "Next: " + next.name.toLowerCase() : "Commissioned and handed over"}${s.open_blockers ? ` · ${s.open_blockers} open blocker(s)` : ""}`);
+    out.push(`  ${line}${s.open_blockers ? ` · ${s.open_blockers} open blocker(s)` : ""}`);
   });
 
   const week = db
