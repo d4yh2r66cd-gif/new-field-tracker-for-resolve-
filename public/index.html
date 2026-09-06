@@ -12,7 +12,7 @@
     --ink:#000000; --card:#161A1B; --field:#0D0F10; --line:#2B3235;
     --text:#EDEFEE; --steel:#B7C0C2; --mist:#838F92;
     --alert:#E2664A; --warn:#E3AC49; --ok:#4CAE7E;
-    --agro:#3FA372; --met:#4E9BDB; --petro:#E2914A; --cold:#63B4C9; --general:#8A97A0;
+    --agro:#3FA372; --met:#4E9BDB; --petro:#E2914A; --cold:#63B4C9; --general:#8A97A0; --poultry:#C99A4A;
   }
   body{margin:0;background:var(--ink);color:var(--text);
     font:400 15px/1.5 Barlow,'Helvetica Neue',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
@@ -37,6 +37,7 @@
   .card.site{border-left:3px solid var(--general)}
   .card.site.agro{border-left-color:var(--agro)} .card.site.met{border-left-color:var(--met)}
   .card.site.petro{border-left-color:var(--petro)} .card.site.cold{border-left-color:var(--cold)}
+  .card.site.poultry{border-left-color:var(--poultry)}
 
   .track{display:flex;gap:2px;margin-top:11px}
   .cell{flex:1;height:14px;border:1px solid var(--line);background:var(--field);border-radius:1px}
@@ -516,7 +517,7 @@ function equipCard(e) {
   const info = $(`<div>
     <div class="name" style="font-size:14.5px">${esc(e.name)}</div>
     <div class="meta">${[e.make,e.model,e.serial].filter(Boolean).map(esc).join(" · ") || "No details"}</div>
-    <div class="meta">${e.service_due ? "Service due " + esc(e.service_due) : "No service schedule"}${e.calibration_due ? " · Calibration due " + esc(e.calibration_due) : ""}</div>
+    <div class="meta">${e.service_due ? "Service due " + esc(e.service_due) : "No service schedule"} · Calibration ${e.calibration_tracked ? (e.calibration_due ? "due " + esc(e.calibration_due) : "not set") : "N/A"}</div>
     <div class="meta">${e.checked ? `Checked by ${esc(e.checked_by)} · ${esc(e.checked_at)}` : "Not checked yet"}</div>
   </div>`);
   left.append(box, info);
@@ -556,14 +557,23 @@ function equipForm(s) {
   box.append($(`<p class="note">It'll arrive with ${s.type_label}'s commissioning checklist, ready to tick off.</p>`));
   [["name","Equipment name"],["make","Make"],["model","Model"],["serial","Serial number"]].forEach(([k,l]) => {
     box.append($(`<label>${l}</label>`));
-    const i = $(`<input>`); i.oninput = e => f[k] = e.target.value; box.append(i);
+    const i = $(`<input>`);
+    if (k === "name" && s.equipment_suggestions.length) {
+      i.setAttribute("list", "equip-suggest");
+      box.append($(`<datalist id="equip-suggest">${s.equipment_suggestions.map(x=>`<option value="${esc(x)}">`).join("")}</datalist>`));
+    }
+    i.oninput = e => f[k] = e.target.value; box.append(i);
   });
   box.append($(`<label>Last serviced</label>`));
   const ls = $(`<input type="date">`); ls.onchange = e => f.last_service = e.target.value; box.append(ls);
   box.append($(`<label>Service interval (days)</label>`));
   const si = $(`<input inputmode="numeric" placeholder="180">`); si.oninput = e => f.service_days = e.target.value; box.append(si);
-  box.append($(`<label>Calibration due</label>`));
-  const cd = $(`<input type="date">`); cd.onchange = e => f.calibration_due = e.target.value; box.append(cd);
+  if (s.tracks_calibration) {
+    box.append($(`<label>Calibration due</label>`));
+    const cd = $(`<input type="date">`); cd.onchange = e => f.calibration_due = e.target.value; box.append(cd);
+  } else {
+    box.append($(`<p class="note">Calibration: N/A for ${s.type_label} equipment.</p>`));
+  }
   const save = $(`<button class="btn" style="margin-top:14px">Add to register</button>`);
   save.onclick = async () => {
     if (!f.name) return err("Give the equipment a name.");

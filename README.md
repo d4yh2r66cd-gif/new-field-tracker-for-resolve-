@@ -5,25 +5,34 @@ people and records, fully separated from every other organisation on the same se
 
 Each site is created with a **type**, and the type decides what its equipment tracks:
 
-| Site type | Stages per equipment item | Readings it expects |
-| --- | --- | --- |
-| Agro-processing plant | 10 | Throughput, moisture, dryer temperature, current |
-| Meteorological station | 10 | Air temperature, humidity, pressure, wind, rainfall, battery |
-| Petroleum laboratory | 10 | Density, flash point, sulphur, lab temperature and humidity |
-| Cold chain facility | 10 | Room and ambient temperature, compressor hours, door openings |
-| General field site | 6 | — |
+| Site type | Stages per equipment | Readings it expects | Example equipment |
+| --- | --- | --- | --- |
+| Agro-processing plant | 10 | Throughput, moisture, dryer temperature, current | Cage-type cleaner, paddle boat washer, peeler, grater, hydraulic press, sifting machine, fryer, conveyor, vibrator, milling machine, packaging machine, scale |
+| Poultry processing plant | 10 | Throughput, scalder temperature, chiller temperature, line speed | Live bird receiving cage, scalder, plucker, evisceration table, giblet harvester, chiller, cut-up machine, deboning machine, grading & sizing machine, packaging machine, metal detector, blast freezer |
+| Meteorological station | 10 | Air temperature, humidity, pressure, wind, rainfall, battery | Weather station, anemometer, rain gauge, barometer, temperature/humidity sensors, pyranometer, wind vane, data logger |
+| Petroleum laboratory | 10 | Density, flash point, sulphur, lab temperature and humidity | Gum tester, flash point tester, distillation apparatus, viscometer, density meter, Karl Fischer titrator, sulphur analyzer, octane analyzer |
+| Cold chain facility | 10 | Room and ambient temperature, compressor hours, door openings | Cold room panels, condensing unit, evaporator coil, compressor, temperature data logger, backup generator |
+| General field site | 6 | — | — |
 
 Readings with a declared range are flagged automatically when a value falls outside it, and
-flagged readings appear in the next progress update without anyone having to remember them.
+flagged readings appear in the next progress update without anyone having to remember them. The
+example equipment names above show up as autocomplete suggestions when adding equipment to a
+site of that type — typing something else is always fine, they're a starting point, not a list.
 
 ## What each site holds
 
 - **Equipment register** — every machine on site (a hydraulic press, a dryer, a mast) gets its
   own commissioning checklist, drawn from the site's type, ticked off independently with who and
-  when. It also carries make, model, serial, service interval and calibration due date, with
-  status turning to *due soon* at 30 days and *overdue* past the date, plus a check-box for
-  "present and working". A site's overall progress is the average across whatever equipment it
-  has — nothing to add yet means 0%, not blocked.
+  when. It also carries make, model, serial and service interval, with status turning to *due
+  soon* at 30 days and *overdue* past the date, plus a check-box for "present and working". A
+  site's overall progress is the average across whatever equipment it has — nothing to add yet
+  means 0%, not blocked.
+
+  Calibration due date is part of this too, except on site types that declare `calibration:
+  false` in their definition (agro-processing and poultry processing plants, since process
+  machinery like cleaners, peelers, presses, scalders and pluckers isn't calibrated the way a lab
+  instrument or sensor is) — there the
+  column reads N/A and never counts toward due/overdue status.
 - **Daily activity log** — work done, crew size, hours, issues, and up to 6 photos per entry.
 - **Readings** — the parameters for that site type, timestamped and attributable.
 

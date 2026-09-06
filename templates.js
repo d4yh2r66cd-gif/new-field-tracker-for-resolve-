@@ -6,6 +6,9 @@ const SITE_TYPES = {
   agro_processing: {
     label: "Agro-processing plant",
     accent: "agro",
+    // Process machinery (cleaners, washers, peelers, presses, mills, packers…) isn't
+    // calibrated the way a lab instrument or sensor is — so this column is N/A here.
+    calibration: false,
     stages: [
       "Delivered to site",
       "Foundation & base",
@@ -23,6 +26,42 @@ const SITE_TYPES = {
       { key: "moisture", label: "Product moisture", unit: "%", min: 8, max: 13 },
       { key: "dryer_temp", label: "Dryer temperature", unit: "°C", min: 120, max: 180 },
       { key: "current", label: "Line current draw", unit: "A" },
+    ],
+    // Suggested names shown while adding equipment — a starting point, not a restriction.
+    equipment: [
+      "Cage-type Cleaner", "Paddle Boat Washer", "Peeler", "Grater", "Hydraulic Press",
+      "Sifting Machine", "Fryer", "Conveyor", "Vibrator", "Milling Machine",
+      "Packaging Machine", "Scale",
+    ],
+  },
+
+  poultry_processing: {
+    label: "Poultry processing plant",
+    accent: "poultry",
+    // Same reasoning as agro-processing — this is process/mechanical line equipment.
+    calibration: false,
+    stages: [
+      "Delivered to site",
+      "Foundation & base",
+      "Positioned & anchored",
+      "Mechanical assembly",
+      "Electrical & controls",
+      "Sanitation & hygiene clearance",
+      "No-load test run",
+      "Load test with live product",
+      "Operator training",
+      "Commissioned & handed over",
+    ],
+    readings: [
+      { key: "throughput", label: "Throughput", unit: "birds/hr" },
+      { key: "scald_temp", label: "Scalder water temperature", unit: "°C", min: 50, max: 54 },
+      { key: "chiller_temp", label: "Chiller temperature", unit: "°C", min: 0, max: 4 },
+      { key: "line_speed", label: "Line speed", unit: "birds/min" },
+    ],
+    equipment: [
+      "Live Bird Receiving Cage", "Scalder", "Plucker", "Evisceration Table",
+      "Giblet Harvester", "Chiller", "Cut-up Machine", "Deboning Machine",
+      "Grading & Sizing Machine", "Packaging Machine", "Metal Detector", "Blast Freezer",
     ],
   },
 
@@ -49,6 +88,11 @@ const SITE_TYPES = {
       { key: "rainfall", label: "Rainfall", unit: "mm" },
       { key: "battery", label: "Logger battery", unit: "V", min: 11.8, max: 14.5 },
     ],
+    equipment: [
+      "Weather Station", "Anemometer", "Rain Gauge", "Barometer",
+      "Temperature Sensor", "Humidity Sensor", "Pyranometer (Solar Radiation Sensor)",
+      "Wind Vane", "Data Logger", "Lightning Detector", "Solar Panel & Battery Bank",
+    ],
   },
 
   petroleum_lab: {
@@ -73,6 +117,12 @@ const SITE_TYPES = {
       { key: "lab_temp", label: "Laboratory temperature", unit: "°C", min: 18, max: 25 },
       { key: "lab_humidity", label: "Laboratory humidity", unit: "%", min: 35, max: 65 },
     ],
+    equipment: [
+      "Gum Tester (Jet Evaporation)", "Flash Point Tester", "Distillation Apparatus",
+      "Viscometer", "Density Meter", "Karl Fischer Titrator", "Sulphur Analyzer (XRF)",
+      "Octane Number Analyzer", "Cold Filter Plugging Point (CFPP) Tester",
+      "Reid Vapor Pressure (RVP) Tester", "Corrosion Test Bath (Copper Strip)",
+    ],
   },
 
   cold_chain: {
@@ -96,6 +146,11 @@ const SITE_TYPES = {
       { key: "compressor_hours", label: "Compressor run hours", unit: "hrs" },
       { key: "door_openings", label: "Door openings", unit: "count" },
     ],
+    equipment: [
+      "Cold Room Panels", "Condensing Unit", "Evaporator Coil", "Compressor",
+      "Temperature Data Logger", "Door Alarm System", "Backup Generator",
+      "Insulated Strip Door", "Defrost Heater", "Refrigerant Charging Station",
+    ],
   },
 
   general: {
@@ -110,20 +165,8 @@ const SITE_TYPES = {
       "Demobilisation & handover",
     ],
     readings: [],
+    equipment: [],
   },
 };
 
-function typeOf(key) {
-  return SITE_TYPES[key] || SITE_TYPES.general;
-}
-
-// A reading is flagged when the site type declares a range and the value is outside it.
-function outOfRange(siteType, key, value) {
-  const def = typeOf(siteType).readings.find((r) => r.key === key);
-  if (!def || value == null) return false;
-  if (def.min != null && value < def.min) return true;
-  if (def.max != null && value > def.max) return true;
-  return false;
-}
-
-module.exports = { SITE_TYPES, typeOf, outOfRange };
+module.exports = { SITE_TYPES };

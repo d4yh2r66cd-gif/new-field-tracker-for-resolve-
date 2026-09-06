@@ -197,13 +197,14 @@ function outOfRange(orgId, siteType, key, value) {
 function listSiteTypes(orgId) {
   const builtins = Object.entries(SITE_TYPES).map(([key, t]) => ({
     key, label: t.label, accent: t.accent, stages: t.stages, readings: t.readings,
+    equipment: t.equipment || [],
   }));
   const customs = db
     .prepare("SELECT key, label, accent, stages, readings FROM site_types WHERE org_id = ? ORDER BY label")
     .all(orgId)
     .map((r) => ({
       key: r.key, label: r.label, accent: r.accent,
-      stages: JSON.parse(r.stages), readings: JSON.parse(r.readings), custom: true,
+      stages: JSON.parse(r.stages), readings: JSON.parse(r.readings), equipment: [], custom: true,
     }));
   return [...builtins, ...customs];
 }
@@ -223,6 +224,8 @@ function siteWithStages(orgId, siteId) {
   const type = typeOf(orgId, s.site_type);
   s.type_label = type.label;
   s.accent = type.accent;
+  s.tracks_calibration = type.calibration !== false;
+  s.equipment_suggestions = type.equipment || [];
   s.open_blockers = db
     .prepare("SELECT COUNT(*) c FROM logs WHERE site_id = ? AND severity='blocker' AND resolved=0")
     .get(siteId).c;
@@ -262,6 +265,8 @@ function logWithPhotos(orgId, id) {
 // Equipment carries derived service/calibration status and its own commissioning
 // checklist, so the client doesn't have to recompute any of it.
 function equipmentFor(orgId, siteId) {
+  const site = db.prepare("SELECT site_type FROM sites WHERE id = ?").get(siteId);
+  const tracksCalibration = site ? typeOf(orgId, site.site_type).calibration !== false : true;
   const rows = db
     .prepare("SELECT * FROM equipment WHERE org_id = ? AND site_id = ? ORDER BY name")
     .all(orgId, siteId);
@@ -276,7 +281,7 @@ function equipmentFor(orgId, siteId) {
     const days = (dateStr) =>
       dateStr ? Math.round((new Date(dateStr) - now) / 86400000) : null;
     const svc = days(serviceDue);
-    const cal = days(e.calibration_due);
+    const cal = tracksCalibration ? days(e.calibration_due) : null;
     const worst = [svc, cal].filter((x) => x != null).sort((a, b) => a - b)[0];
     const stages = db
       .prepare("SELECT idx, name, done, done_at, done_by FROM equipment_stages WHERE equipment_id = ? ORDER BY idx")
@@ -290,6 +295,7 @@ function equipmentFor(orgId, siteId) {
       checked: !!e.checked,
       stages,
       percent,
+      calibration_tracked: tracksCalibration,
       service_due: serviceDue,
       service_in_days: svc,
       calibration_in_days: cal,
