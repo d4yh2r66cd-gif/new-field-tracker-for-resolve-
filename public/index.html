@@ -461,10 +461,33 @@ function siteTypeBuilder(onCreated, onCancel) {
 
 async function renderSite() {
   const s = await api("/api/sites/" + siteId);
-  app.append($(`<div class="card site ${s.accent}">
+  const header = $(`<div class="card site ${s.accent}">
     <div class="row"><div><h2 style="font-size:18px">${esc(s.name)}</h2>
     <div class="meta">${esc(s.type_label)}${s.location ? " · " + esc(s.location) : ""}${s.client ? " · " + esc(s.client) : ""}</div>
-    </div><div class="num" style="font-size:17px">${s.percent}%</div></div>${equipTrackHtml(s)}</div>`));
+    </div><div class="num" style="font-size:17px">${s.percent}%</div></div>${equipTrackHtml(s)}</div>`);
+  app.append(header);
+  const percentEl = header.querySelector(".num");
+
+  // Ticking a checkbox on a piece of equipment only needs the equipment
+  // section (and this header's percent/track) to update — not the whole
+  // page redrawn and scrolled back to the top, which reads as a refresh.
+  let equipListEl = null;
+  const expandedIds = new Set(); // which equipment checklists are open, kept across in-place updates
+  const onEquipmentChanged = (fresh) => {
+    s.equipment = fresh;
+    s.equipment_count = fresh.length;
+    s.equipment_done = fresh.filter(e => e.percent === 100).length;
+    s.percent = fresh.length ? Math.round(fresh.reduce((t, e) => t + e.percent, 0) / fresh.length) : 0;
+    percentEl.textContent = s.percent + "%";
+    const oldTrack = header.querySelector(".track");
+    const newTrack = equipTrackHtml(s);
+    if (oldTrack) oldTrack.outerHTML = newTrack;
+    else if (newTrack) header.insertAdjacentHTML("beforeend", newTrack);
+    if (equipListEl) {
+      equipListEl.innerHTML = "";
+      fresh.forEach(e => equipListEl.append(equipCard(e, onEquipmentChanged, expandedIds)));
+    }
+  };
 
   // readings
   app.append($(`<div class="hd">Readings</div>`));
@@ -497,7 +520,7 @@ async function renderSite() {
     app.append(add);
   }
   if (!s.equipment.length) app.append($(`<p class="note">Nothing on the register yet.</p>`));
-  else app.append(list(s.equipment.map(equipCard)));
+  else { equipListEl = list(s.equipment.map(e => equipCard(e, onEquipmentChanged, expandedIds))); app.append(equipListEl); }
 
   // logs
   app.append($(`<div class="hd">Recent entries</div>`));
@@ -552,17 +575,23 @@ function readingForm(s) {
   return box;
 }
 
-function equipCard(e) {
+// expandedIds (a Set of equipment ids) remembers which checklists are open across
+// in-place refreshes — otherwise every checkbox tick would snap them shut again.
+function equipCard(e, onUpdated, expandedIds) {
+  const hasStages = e.stages.length > 0;
   const chip = e.status === "overdue" ? `<span class="chip alert">overdue</span>`
     : e.status === "due_soon" ? `<span class="chip warn">due soon</span>` : `<span class="chip ok">ok</span>`;
-  const card = $(`<div class="item"><div class="row" style="align-items:flex-start"></div></div>`);
+  const card = $(`<div class="item${hasStages?" tap":""}"><div class="row" style="align-items:flex-start"></div></div>`);
   const row = card.firstChild;
   const left = $(`<div class="row" style="gap:11px;align-items:flex-start"></div>`);
   const box = $(`<button type="button" class="box ${e.checked?"on":""}" style="margin-top:2px" aria-label="Checked present and working">${e.checked?"✓":""}</button>`);
   if (me.role === "officer") box.disabled = true;
-  else box.onclick = async () => {
-    try { await api(`/api/equipment/${e.id}/check`, { method:"POST", body:{ checked: !e.checked } }); render(); }
-    catch (er) { err(er.message); }
+  else box.onclick = async (ev) => {
+    ev.stopPropagation();
+    try {
+      const fresh = await api(`/api/equipment/${e.id}/check`, { method:"POST", body:{ checked: !e.checked } });
+      onUpdated ? onUpdated(fresh) : render();
+    } catch (er) { err(er.message); }
   };
   const info = $(`<div>
     <div class="name" style="font-size:14.5px">${esc(e.name)}</div>
@@ -571,29 +600,45 @@ function equipCard(e) {
     <div class="meta">${e.checked ? `Checked by ${esc(e.checked_by)} · ${esc(e.checked_at)}` : "Not checked yet"}</div>
   </div>`);
   left.append(box, info);
-  row.append(left, $(chip));
+  const right = $(`<div style="display:flex;align-items:center;gap:8px"></div>`);
+  right.insertAdjacentHTML("beforeend", chip);
+  const isOpen = hasStages && expandedIds && expandedIds.has(e.id);
+  const caret = hasStages ? $(`<span style="font-size:11px;color:var(--mist);display:inline-block;transition:transform .2s ease;transform:rotate(${isOpen?90:0}deg)">▸</span>`) : null;
+  if (caret) right.append(caret);
+  row.append(left, right);
 
-  if (e.stages.length) {
-    card.append($(`<div class="row" style="margin-top:12px"><div class="meta">Commissioning</div><div class="meta">${e.percent}%</div></div>`));
-    card.append($(trackHtml({ stages: e.stages, open_blockers: 0 })));
+  if (hasStages) {
+    const panel = $(`<div style="margin-top:12px" ${isOpen?"":"hidden"}></div>`);
+    panel.append($(`<div class="row"><div class="meta">Commissioning</div><div class="meta">${e.percent}%</div></div>`));
+    panel.append($(trackHtml({ stages: e.stages, open_blockers: 0 })));
     const stageList = $(`<div class="card flat" style="margin-top:8px"></div>`);
     e.stages.forEach(st => {
       const b = $(`<button class="stage"><span class="idx">${st.idx+1}</span>
         <span class="box ${st.done?"on":""}">${st.done?"✓":""}</span>
         <span class="txt">${esc(st.name)}${st.done&&st.done_by?`<div class="when">${esc(st.done_by)} · ${esc(st.done_at)}</div>`:""}</span></button>`);
       if (me.role === "officer") b.disabled = true;
-      else b.onclick = async () => {
-        try { await api(`/api/equipment/${e.id}/stages/${st.idx}`, { method:"POST", body:{ done: !st.done } }); render(); }
-        catch (er) { err(er.message); }
+      else b.onclick = async (ev) => {
+        ev.stopPropagation();
+        try {
+          const fresh = await api(`/api/equipment/${e.id}/stages/${st.idx}`, { method:"POST", body:{ done: !st.done } });
+          onUpdated ? onUpdated(fresh) : render();
+        } catch (er) { err(er.message); }
       };
       stageList.append(b);
     });
-    card.append(stageList);
+    panel.append(stageList);
+    card.append(panel);
+    card.onclick = () => {
+      panel.hidden = !panel.hidden;
+      caret.style.transform = `rotate(${panel.hidden?0:90}deg)`;
+      if (expandedIds) panel.hidden ? expandedIds.delete(e.id) : expandedIds.add(e.id);
+    };
   }
 
   if (me.role !== "officer") {
     const b = $(`<button class="btn ghost slim" style="margin-top:10px">Mark serviced today</button>`);
-    b.onclick = async () => {
+    b.onclick = async (ev) => {
+      ev.stopPropagation();
       try { await api("/api/equipment/" + e.id, { method:"PATCH", body:{ last_service: today() } }); render(); }
       catch (er) { err(er.message); }
     };
