@@ -188,7 +188,21 @@ function authScreen(mode = "in") {
   const box = $(`<div class="card" style="margin-top:16px"></div>`), f = {};
   const field = (k, l, t = "text") => {
     box.append($(`<label>${l}</label>`));
-    const i = $(`<input type="${t}">`); i.oninput = e => f[k] = e.target.value; box.append(i);
+    if (t !== "password") {
+      const i = $(`<input type="${t}">`); i.oninput = e => f[k] = e.target.value; box.append(i);
+      return;
+    }
+    const wrap = $(`<div style="position:relative"></div>`);
+    const i = $(`<input type="password" style="padding-right:60px">`);
+    i.oninput = e => f[k] = e.target.value;
+    const toggle = $(`<button type="button" class="btn ghost slim" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:5px 9px;font-size:11.5px">Show</button>`);
+    toggle.onclick = () => {
+      const showing = i.type === "text";
+      i.type = showing ? "password" : "text";
+      toggle.textContent = showing ? "Show" : "Hide";
+    };
+    wrap.append(i, toggle);
+    box.append(wrap);
   };
   if (mode === "new") field("org", "Organisation name");
   if (mode !== "in") field("name", "Your name");
