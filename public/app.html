@@ -1,0 +1,906 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FieldTrack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  :root{
+    --ink:#000000; --card:#161A1B; --field:#0D0F10; --line:#2B3235;
+    --text:#EDEFEE; --steel:#B7C0C2; --mist:#838F92;
+    --alert:#E2664A; --warn:#E3AC49; --ok:#4CAE7E;
+    --agro:#3FA372; --met:#4E9BDB; --petro:#E2914A; --cold:#63B4C9; --general:#8A97A0; --poultry:#C99A4A;
+  }
+  body{margin:0;background:var(--ink);color:var(--text);
+    font:400 15px/1.5 Inter,'Helvetica Neue',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:600px;margin:0 auto;padding:0 16px 110px}
+  h1,h2,h3{margin:0;font-weight:600;letter-spacing:-.01em}
+  header.top{position:sticky;top:0;z-index:20;background:var(--ink);color:#E9EEEC;padding:13px 16px 15px}
+  header.top .in{max-width:600px;margin:0 auto;display:flex;justify-content:space-between;align-items:center}
+  header.top h1{font-size:17px;color:#FCFCFA}
+  header.top .sub{font-size:12px;color:#93A5A9;margin-top:2px}
+  header.top button{background:none;border:1px solid #3A4A52;color:#93A5A9;border-radius:3px;
+    padding:6px 10px;font:inherit;font-size:12px;cursor:pointer}
+
+  @keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  @media (prefers-reduced-motion: no-preference){
+    .rise{animation:rise .32s cubic-bezier(.16,.8,.4,1) both}
+    #app{animation:fadeIn .18s ease both}
+  }
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:3px;padding:14px;margin-bottom:10px}
+  .card.flat{padding:0;overflow:hidden}
+  .card.tap{cursor:pointer;transition:background-color .15s ease}
+  .card.tap:active{transform:scale(.99);transition:transform .1s ease}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+
+  /* a single connected list — rows of anything, divided by hairlines, used for
+     the Sites/Log/Equipment/Updates/Team tabs instead of separate boxed cards */
+  .item{display:block;width:100%;text-align:left;padding:14px;background:none;border:none;
+    font:inherit;color:inherit;transition:background-color .15s ease}
+  .item + .item{border-top:1px solid var(--line)}
+  .item.tap{cursor:pointer}
+  .item.tap:hover{background:rgba(255,255,255,.03)}
+  .item.tap:active{background:rgba(255,255,255,.05)}
+  .item.site{border-left:3px solid var(--general)}
+  .item.site.agro{border-left-color:var(--agro)} .item.site.met{border-left-color:var(--met)}
+  .item.site.petro{border-left-color:var(--petro)} .item.site.cold{border-left-color:var(--cold)}
+  .item.site.poultry{border-left-color:var(--poultry)}
+  .name{font-size:15.5px;font-weight:600}
+  .meta{font-size:12.5px;color:var(--mist);margin-top:2px}
+  .num{font-size:14px;font-weight:600;color:var(--steel);font-variant-numeric:tabular-nums}
+
+  /* site-type accent bar makes sectors identifiable at a glance */
+  .card.site{border-left:3px solid var(--general)}
+  .card.site.agro{border-left-color:var(--agro)} .card.site.met{border-left-color:var(--met)}
+  .card.site.petro{border-left-color:var(--petro)} .card.site.cold{border-left-color:var(--cold)}
+  .card.site.poultry{border-left-color:var(--poultry)}
+
+  .track{display:flex;gap:2px;margin-top:11px}
+  .cell{flex:1;height:14px;border:1px solid var(--line);background:var(--field);border-radius:1px;
+    transition:background-color .25s ease,border-color .25s ease}
+  .cell.done{background:var(--ok);border-color:var(--ok)}
+  .cell.next{background:var(--warn);border-color:var(--warn)}
+  .cell.blocked{background:var(--alert);border-color:var(--alert)}
+
+  .stage{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:11px 14px;
+    background:none;border:none;border-top:1px solid var(--line);font:inherit;color:inherit;cursor:pointer;
+    transition:background-color .15s ease}
+  .stage:first-child{border-top:none}
+  .stage:hover{background:rgba(255,255,255,.03)}
+  .stage .idx{width:20px;font-size:12px;color:var(--mist);font-variant-numeric:tabular-nums}
+  .box{width:19px;height:19px;border:1.5px solid var(--steel);border-radius:2px;flex-shrink:0;
+    display:grid;place-items:center;font-size:12px;color:#fff;
+    transition:background-color .18s ease,border-color .18s ease,transform .15s ease}
+  .box.on{background:var(--ok);border-color:var(--ok);animation:pop .25s ease}
+  .stage .txt{flex:1;font-size:14px} .stage .when{font-size:11.5px;color:var(--mist)}
+  @keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.18)}100%{transform:scale(1)}}
+
+  button.btn{display:flex;align-items:center;justify-content:center;gap:7px;background:#1E2427;
+    color:var(--text);border:1px solid #2E3538;border-radius:3px;padding:12px 16px;font:inherit;font-size:14.5px;
+    font-weight:500;cursor:pointer;width:100%;margin-bottom:8px;
+    transition:transform .1s ease,background-color .15s ease}
+  button.btn:active{transform:scale(.98)}
+  button.btn[disabled]{background:var(--field);color:#5C666A;border-color:var(--line);cursor:default}
+  button.btn.ghost{background:none;color:var(--steel);border:1px solid var(--line)}
+  button.btn.warn{background:var(--warn);color:#241905;border-color:var(--warn)}
+  button.btn.danger{background:#3A2018;color:var(--alert);border:1px solid #5A3226}
+  button.btn.danger[disabled]{background:var(--field);color:#5C666A;border-color:var(--line)}
+  button.btn.slim{padding:8px 12px;font-size:13px;width:auto;margin:0}
+
+  label{display:block;font-size:12.5px;color:var(--steel);margin:12px 0 5px;font-weight:500}
+  input,textarea,select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:3px;
+    background:var(--field);font:inherit;font-size:15px;color:var(--text)}
+  textarea{min-height:90px;resize:vertical;line-height:1.5}
+  :focus-visible{outline:2px solid var(--warn);outline-offset:2px}
+
+  nav.tabs{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;background:var(--ink);
+    border-top:1px solid #263239;padding-bottom:env(safe-area-inset-bottom)}
+  nav.tabs button{position:relative;flex:1;background:none;border:none;color:#7C8F94;padding:13px 4px 11px;
+    font:inherit;font-size:11.5px;cursor:pointer;transition:color .2s ease}
+  nav.tabs button::after{content:"";position:absolute;left:50%;bottom:3px;width:4px;height:4px;
+    border-radius:50%;background:#E8B33D;transform:translateX(-50%) scale(0);transition:transform .2s ease}
+  nav.tabs button.on{color:#E8B33D;font-weight:600}
+  nav.tabs button.on::after{transform:translateX(-50%) scale(1)}
+
+  .chip{display:inline-block;font-size:11px;padding:3px 8px;border-radius:2px;background:var(--field);
+    color:var(--steel);font-weight:500}
+  .chip.alert{background:#3A2018;color:var(--alert)}
+  .chip.warn{background:#3A2E12;color:var(--warn)}
+  .chip.ok{background:#123423;color:var(--ok)}
+  .hd{font-size:12.5px;color:var(--steel);font-weight:600;margin:20px 0 8px;
+    display:flex;justify-content:space-between;align-items:center}
+  .err{background:#3A2018;color:var(--alert);border:1px solid #5A3226;border-radius:3px;
+    padding:10px 12px;font-size:13px;margin:10px 0}
+  .ok-msg{background:#123423;color:var(--ok);border:1px solid #245A3C;border-radius:3px;
+    padding:10px 12px;font-size:13px;margin:10px 0}
+  .note{font-size:12.5px;color:var(--mist);line-height:1.55}
+  .body{white-space:pre-wrap;font-size:14px;line-height:1.6;color:var(--steel)}
+  .empty{text-align:center;padding:36px 20px;color:var(--mist);font-size:14px;line-height:1.55}
+  .swatches{display:flex;gap:10px}
+  .swatch{width:30px;height:30px;border-radius:50%;border:2px solid transparent;padding:0;cursor:pointer;flex:none}
+  .swatch.on{border-color:var(--text)}
+  .swatch.general{background:var(--general)} .swatch.agro{background:var(--agro)}
+  .swatch.met{background:var(--met)} .swatch.petro{background:var(--petro)} .swatch.cold{background:var(--cold)}
+  .rowline{display:flex;gap:8px;margin-bottom:6px} .rowline>input{flex:1}
+  .thumbs{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .thumbs img{width:62px;height:62px;object-fit:cover;border-radius:2px;border:1px solid var(--line)}
+  .split{display:flex;gap:8px} .split>*{flex:1}
+  table.rd{width:100%;border-collapse:collapse;font-size:13px}
+  table.rd td{padding:7px 4px;border-top:1px solid var(--line)}
+  table.rd tr:first-child td{border-top:none}
+  table.rd td.v{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+  .flagrow td{color:var(--alert)}
+</style>
+</head>
+<body>
+<header class="top" id="top" hidden><div class="in">
+  <div><h1 id="orgName"></h1><div class="sub" id="orgSub"></div></div>
+  <button id="backBtn" hidden>← Back</button>
+</div></header>
+<main class="wrap" id="app"></main>
+<nav class="tabs" id="tabs" hidden></nav>
+
+<script>
+let token = localStorage.getItem("ft") || "";
+let me = null, org = null, state = {}, view = "sites", siteId = null, types = [];
+
+const $ = h => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content.firstChild; };
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const app = document.getElementById("app");
+const today = () => new Date().toISOString().slice(0,10);
+const ROLES = { owner:"Account owner", lead:"Site lead", officer:"Senior officer", tech:"Technician" };
+
+// Cascading entrance for a freshly-rendered list — each row rises in a beat after the last.
+const riseIn = (el, i = 0) => { el.classList.add("rise"); el.style.animationDelay = Math.min(i, 12) * 30 + "ms"; return el; };
+// A single connected list (Sites/Log/Equipment/Updates/Team): one flat card holding .item rows.
+const list = (items) => { const l = $(`<div class="card flat"></div>`); items.forEach((el, i) => l.append(riseIn(el, i))); return l; };
+
+async function api(path, opts = {}) {
+  const o = { headers: {}, ...opts };
+  if (token) o.headers.Authorization = "Bearer " + token;
+  if (o.body && !(o.body instanceof FormData)) {
+    o.headers["Content-Type"] = "application/json";
+    o.body = JSON.stringify(o.body);
+  }
+  const r = await fetch(path, o);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || "Request failed.");
+  return d;
+}
+function err(m) { const o = document.querySelector(".err"); if (o) o.remove(); app.prepend($(`<div class="err">${esc(m)}</div>`)); }
+function ok(m) { const o = document.querySelector(".ok-msg"); if (o) o.remove(); app.prepend($(`<div class="ok-msg">${esc(m)}</div>`)); }
+
+/* ---------------- auth ---------------- */
+
+function authScreen(mode = "in") {
+  document.getElementById("top").hidden = true;
+  document.getElementById("tabs").hidden = true;
+  app.innerHTML = "";
+  const titles = { in:"Sign in", join:"Join your organisation", new:"Set up a new organisation" };
+  app.append($(`<h1 style="margin:30px 0 6px;font-size:23px">${titles[mode]}</h1>`));
+  app.append($(`<p class="note">Field activity tracking across sites — stages, equipment, readings and daily work.</p>`));
+
+  const box = $(`<div class="card" style="margin-top:16px"></div>`), f = {};
+  const field = (k, l, t = "text") => {
+    box.append($(`<label>${l}</label>`));
+    if (t !== "password") {
+      const i = $(`<input type="${t}">`); i.oninput = e => f[k] = e.target.value; box.append(i);
+      return;
+    }
+    const wrap = $(`<div style="position:relative"></div>`);
+    const i = $(`<input type="password" style="padding-right:60px">`);
+    i.oninput = e => f[k] = e.target.value;
+    const toggle = $(`<button type="button" class="btn ghost slim" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:5px 9px;font-size:11.5px">Show</button>`);
+    toggle.onclick = () => {
+      const showing = i.type === "text";
+      i.type = showing ? "password" : "text";
+      toggle.textContent = showing ? "Show" : "Hide";
+    };
+    wrap.append(i, toggle);
+    box.append(wrap);
+  };
+  if (mode === "new") field("org", "Organisation name");
+  if (mode !== "in") field("name", "Your name");
+  field("email", "Email", "email");
+  field("password", "Password (8+ characters)", "password");
+  if (mode !== "in") field("phone", "Phone (optional)", "tel");
+  if (mode === "join") {
+    field("joinCode", "Join code from your organisation");
+    box.append($(`<label>Your role</label>`));
+    const s = $(`<select><option value="tech">Technician — logs work and readings</option><option value="lead">Site lead — runs sites</option><option value="officer">Senior officer — receives updates</option></select>`);
+    s.onchange = e => f.role = e.target.value; f.role = "tech"; box.append(s);
+  }
+  app.append(box);
+
+  const go = $(`<button class="btn">${mode === "in" ? "Sign in" : "Create account"}</button>`);
+  go.onclick = async () => {
+    go.disabled = true;
+    const url = mode === "new" ? "/api/orgs" : mode === "join" ? "/api/auth/register" : "/api/auth/login";
+    try {
+      const r = await api(url, { method: "POST", body: f });
+      token = r.token; localStorage.setItem("ft", token);
+      if (r.joinCode) alert("Your organisation's join code is:\n\n" + r.joinCode + "\n\nGive it to your colleagues so they can create accounts. You can find it again on the Team tab.");
+      await boot();
+    } catch (e) { err(e.message); go.disabled = false; }
+  };
+  app.append(go);
+
+  const links = mode === "in"
+    ? [["join","Join an existing organisation"],["new","Set up a new organisation"]]
+    : [["in","Back to sign in"]];
+  links.forEach(([m, label]) => {
+    const b = $(`<button class="btn ghost">${label}</button>`);
+    b.onclick = () => authScreen(m); app.append(b);
+  });
+}
+
+/* ---------------- chrome ---------------- */
+
+function chrome() {
+  document.getElementById("top").hidden = false;
+  document.getElementById("tabs").hidden = false;
+  document.getElementById("orgName").textContent = org.name;
+  const active = state.sites.filter(s => s.status === "active").length;
+  const overall = state.sites.length
+    ? Math.round(state.sites.reduce((t,s) => t + s.percent, 0) / state.sites.length) : 0;
+  document.getElementById("orgSub").textContent =
+    `${state.sites.length} sites · ${active} active · ${overall}% average progress`;
+
+  const back = document.getElementById("backBtn");
+  back.hidden = view !== "site";
+  back.onclick = () => { view = "sites"; siteId = null; render(); };
+
+  const tabs = [["sites","Sites"],["logs","Log"],["equipment","Equipment"],["reports","Updates"],["team","Team"]];
+  const nav = document.getElementById("tabs"); nav.innerHTML = "";
+  tabs.forEach(([id, label]) => {
+    const b = $(`<button class="${view === id || (id==="sites" && view==="site") ? "on":""}">${label}</button>`);
+    b.onclick = () => { view = id; siteId = null; render(); };
+    nav.append(b);
+  });
+}
+
+// Generic cell-track for any object with a .stages array — used both for a
+// single piece of equipment's own checklist and (below) for a site's roll-up.
+const trackHtml = s => {
+  const first = s.stages.findIndex(x => !x.done);
+  return `<div class="track">` + s.stages.map((x,i) =>
+    `<div class="cell ${x.done ? "done" : i === first ? (s.open_blockers ? "blocked":"next") : ""}"></div>`).join("") + `</div>`;
+};
+
+// At the site level, each cell is one piece of equipment (done once its own
+// checklist is fully ticked) rather than one stage — a site can hold several
+// independent checklists now.
+const equipTrackHtml = s => {
+  if (!s.equipment.length) return "";
+  const first = s.equipment.findIndex(e => e.percent < 100);
+  return `<div class="track">` + s.equipment.map((e,i) =>
+    `<div class="cell ${e.percent===100 ? "done" : i === first ? (s.open_blockers ? "blocked":"next") : ""}"></div>`).join("") + `</div>`;
+};
+
+/* ---------------- sites ---------------- */
+
+function renderSites() {
+  if (me.role === "owner" || me.role === "lead") {
+    const add = $(`<button class="btn">Add a site</button>`);
+    add.onclick = () => add.replaceWith(siteForm());
+    app.append(add);
+  }
+  if (!state.sites.length) app.append($(`<div class="empty">No sites yet. Add the first one, then add its equipment — each piece gets its own checklist and readings.</div>`));
+  else app.append(list(state.sites.map(s => {
+    const c = $(`<button class="item tap site ${s.accent}">
+      <div class="row"><div>
+        <div class="name">${esc(s.name)}</div>
+        <div class="meta">${esc(s.type_label)}${s.location ? " · " + esc(s.location) : ""}${s.status !== "active" ? " · " + s.status.replace("_"," ") : ""}</div>
+      </div><div class="num">${s.percent}%</div></div>
+      ${equipTrackHtml(s)}
+      <div class="meta" style="margin-top:8px">
+        ${s.equipment_count} equipment${s.equipment_count ? ` · ${s.equipment_done} commissioned` : ""}${s.open_blockers ? ` · <span class="chip alert">${s.open_blockers} blocker${s.open_blockers>1?"s":""}</span>` : ""}
+      </div></button>`);
+    c.onclick = () => { view = "site"; siteId = s.id; render(); };
+    return c;
+  })));
+}
+
+function typeOptions() {
+  return types.map(t => `<option value="${t.key}">${esc(t.label)}</option>`).join("")
+    + `<option value="__new__">+ Add a new kind of site…</option>`;
+}
+
+function siteForm() {
+  const box = $(`<div class="card"></div>`), f = { site_type: "general", start_date: today() };
+  box.append($(`<label>Site name</label>`));
+  const n = $(`<input placeholder="Ho Cassava Plant">`); n.oninput = e => f.name = e.target.value; box.append(n);
+  box.append($(`<label>What kind of site?</label>`));
+  const t = $(`<select>${typeOptions()}</select>`);
+  const preview = $(`<p class="note" style="margin-top:8px"></p>`);
+  const rest = $(`<div></div>`);
+  const showPreview = () => {
+    const ty = types.find(x => x.key === f.site_type);
+    preview.textContent = ty ? `Each piece of equipment added here gets a ${ty.stages.length}-stage checklist, and ${ty.readings.length} reading type${ty.readings.length===1?"":"s"} is tracked for the site.` : "";
+  };
+  let builder = null;
+  t.onchange = e => {
+    if (e.target.value !== "__new__") { f.site_type = e.target.value; showPreview(); return; }
+    rest.hidden = true; preview.hidden = true;
+    builder = siteTypeBuilder(
+      newType => {
+        builder.remove(); builder = null;
+        rest.hidden = false; preview.hidden = false;
+        t.innerHTML = typeOptions();
+        t.value = newType.key; f.site_type = newType.key; showPreview();
+      },
+      () => {
+        builder.remove(); builder = null;
+        rest.hidden = false; preview.hidden = false;
+        t.value = f.site_type;
+      }
+    );
+    t.insertAdjacentElement("afterend", builder);
+  };
+  f.site_type = types[0] ? types[0].key : "general"; box.append(t, preview); showPreview();
+  [["location","Location"],["client","Client or owner"]].forEach(([k,l]) => {
+    rest.append($(`<label>${l}</label>`));
+    const i = $(`<input>`); i.oninput = e => f[k] = e.target.value; rest.append(i);
+  });
+  rest.append($(`<label>Start date</label>`));
+  const d = $(`<input type="date" value="${today()}">`); d.onchange = e => f.start_date = e.target.value; rest.append(d);
+  const save = $(`<button class="btn" style="margin-top:14px">Create site</button>`);
+  save.onclick = async () => {
+    if (!f.name) return err("Give the site a name.");
+    save.disabled = true;
+    try { await api("/api/sites", { method:"POST", body:f }); await boot(); }
+    catch (e) { err(e.message); save.disabled = false; }
+  };
+  rest.append(save);
+  box.append(rest);
+  return box;
+}
+
+// A self-contained builder for a brand-new kind of site: name, colour tag,
+// a stage checklist (starts from a general-purpose template, fully editable),
+// and an optional set of readings. Saves to this organisation only.
+function siteTypeBuilder(onCreated, onCancel) {
+  const box = $(`<div class="card"></div>`);
+  const f = {
+    label: "",
+    accent: "general",
+    stages: ["Mobilisation", "Site survey", "Works in progress", "Testing", "Client inspection", "Demobilisation & handover"],
+    readings: [],
+  };
+
+  box.append($(`<label>Name this kind of site</label>`));
+  const nameI = $(`<input placeholder="Cassava seed farm">`);
+  nameI.oninput = e => f.label = e.target.value;
+  box.append(nameI);
+
+  box.append($(`<label>Colour tag</label>`));
+  const swatches = $(`<div class="swatches"></div>`);
+  const ACCENTS = ["general", "agro", "met", "petro", "cold"];
+  const dots = ACCENTS.map((a, i) => {
+    const d = $(`<button type="button" class="swatch ${a}${i===0?" on":""}" aria-label="${a}"></button>`);
+    d.onclick = () => { f.accent = a; dots.forEach(x => x.classList.remove("on")); d.classList.add("on"); };
+    return d;
+  });
+  dots.forEach(d => swatches.append(d));
+  box.append(swatches);
+
+  box.append($(`<label>Commissioning stages (each piece of equipment gets this checklist)</label>`));
+  const stagesBox = $(`<div></div>`);
+  function renderStages() {
+    stagesBox.innerHTML = "";
+    f.stages.forEach((s, i) => {
+      const row = $(`<div class="rowline"></div>`);
+      const inp = $(`<input placeholder="Stage name">`); inp.value = s;
+      inp.oninput = e => f.stages[i] = e.target.value;
+      row.append(inp);
+      const rm = $(`<button type="button" class="btn ghost slim">✕</button>`);
+      rm.onclick = () => { f.stages.splice(i, 1); renderStages(); };
+      row.append(rm);
+      stagesBox.append(row);
+    });
+  }
+  renderStages();
+  box.append(stagesBox);
+  const addStage = $(`<button type="button" class="btn ghost slim">+ Add stage</button>`);
+  addStage.onclick = () => { f.stages.push(""); renderStages(); };
+  box.append(addStage);
+
+  box.append($(`<label>Readings to record (optional)</label>`));
+  const readingsBox = $(`<div></div>`);
+  function renderReadings() {
+    readingsBox.innerHTML = "";
+    f.readings.forEach((r, i) => {
+      const row = $(`<div class="card flat" style="padding:10px;margin-bottom:8px"></div>`);
+      const l = $(`<input placeholder="Reading name, e.g. Soil pH">`); l.value = r.label;
+      l.oninput = e => r.label = e.target.value;
+      row.append(l);
+      const line = $(`<div class="rowline" style="margin-top:6px"></div>`);
+      const unit = $(`<input placeholder="Unit">`); unit.value = r.unit;
+      unit.oninput = e => r.unit = e.target.value;
+      const min = $(`<input inputmode="decimal" placeholder="Min">`); min.value = r.min;
+      min.oninput = e => r.min = e.target.value;
+      const max = $(`<input inputmode="decimal" placeholder="Max">`); max.value = r.max;
+      max.oninput = e => r.max = e.target.value;
+      line.append(unit, min, max);
+      row.append(line);
+      const rm = $(`<button type="button" class="btn ghost slim" style="margin-top:6px">Remove reading</button>`);
+      rm.onclick = () => { f.readings.splice(i, 1); renderReadings(); };
+      row.append(rm);
+      readingsBox.append(row);
+    });
+  }
+  renderReadings();
+  box.append(readingsBox);
+  const addReading = $(`<button type="button" class="btn ghost slim">+ Add a reading</button>`);
+  addReading.onclick = () => { f.readings.push({ label: "", unit: "", min: "", max: "" }); renderReadings(); };
+  box.append(addReading);
+
+  const actions = $(`<div class="split" style="margin-top:14px"></div>`);
+  const cancel = $(`<button type="button" class="btn ghost">Cancel</button>`);
+  cancel.onclick = onCancel;
+  const save = $(`<button type="button" class="btn">Save this site type</button>`);
+  save.onclick = async () => {
+    if (!f.label.trim()) return err("Give this kind of site a name.");
+    if (!f.stages.some(s => s.trim())) return err("Add at least one stage.");
+    save.disabled = true;
+    try {
+      const t = await api("/api/site-types", { method: "POST", body: f });
+      types.push(t);
+      onCreated(t);
+    } catch (e) { err(e.message); save.disabled = false; }
+  };
+  actions.append(cancel, save);
+  box.append(actions);
+  return box;
+}
+
+async function renderSite() {
+  const s = await api("/api/sites/" + siteId);
+  const header = $(`<div class="card site ${s.accent}">
+    <div class="row"><div><h2 style="font-size:18px">${esc(s.name)}</h2>
+    <div class="meta">${esc(s.type_label)}${s.location ? " · " + esc(s.location) : ""}${s.client ? " · " + esc(s.client) : ""}</div>
+    </div><div class="num" style="font-size:17px">${s.percent}%</div></div>${equipTrackHtml(s)}</div>`);
+  app.append(header);
+  const percentEl = header.querySelector(".num");
+
+  // Ticking a checkbox on a piece of equipment only needs the equipment
+  // section (and this header's percent/track) to update — not the whole
+  // page redrawn and scrolled back to the top, which reads as a refresh.
+  let equipListEl = null;
+  const expandedIds = new Set(); // which equipment checklists are open, kept across in-place updates
+  const onEquipmentChanged = (fresh) => {
+    s.equipment = fresh;
+    s.equipment_count = fresh.length;
+    s.equipment_done = fresh.filter(e => e.percent === 100).length;
+    s.percent = fresh.length ? Math.round(fresh.reduce((t, e) => t + e.percent, 0) / fresh.length) : 0;
+    percentEl.textContent = s.percent + "%";
+    const oldTrack = header.querySelector(".track");
+    const newTrack = equipTrackHtml(s);
+    if (oldTrack) oldTrack.outerHTML = newTrack;
+    else if (newTrack) header.insertAdjacentHTML("beforeend", newTrack);
+    if (equipListEl) {
+      equipListEl.innerHTML = "";
+      fresh.forEach(e => equipListEl.append(equipCard(e, onEquipmentChanged, expandedIds)));
+    }
+  };
+
+  // readings
+  app.append($(`<div class="hd">Readings</div>`));
+  if (s.reading_defs.length && me.role !== "officer") {
+    const add = $(`<button class="btn ghost">Record readings</button>`);
+    add.onclick = () => add.replaceWith(readingForm(s));
+    app.append(add);
+  }
+  if (!s.readings.length) app.append($(`<p class="note">${s.reading_defs.length ? "None recorded yet." : "This site type has no standard readings."}</p>`));
+  else {
+    const byDate = {};
+    s.readings.forEach(r => (byDate[r.taken_on] = byDate[r.taken_on] || []).push(r));
+    Object.keys(byDate).sort().reverse().slice(0,6).forEach(d => {
+      const rows = byDate[d].map(r => {
+        const def = s.reading_defs.find(x => x.key === r.param);
+        return `<tr class="${r.flagged?"flagrow":""}"><td>${esc(def?def.label:r.param)}</td>
+          <td class="v">${r.value} ${esc(r.unit||"")}</td>
+          <td style="width:80px;text-align:right">${r.flagged?'<span class="chip alert">out of range</span>':""}</td></tr>`;
+      }).join("");
+      app.append($(`<div class="card"><div class="name" style="font-size:13.5px">${esc(d)}</div>
+        <table class="rd" style="margin-top:6px">${rows}</table></div>`));
+    });
+  }
+
+  // equipment
+  app.append($(`<div class="hd">Equipment</div>`));
+  if (me.role !== "officer") {
+    const add = $(`<button class="btn ghost">Add equipment</button>`);
+    add.onclick = () => add.replaceWith(equipForm(s));
+    app.append(add);
+  }
+  if (!s.equipment.length) app.append($(`<p class="note">Nothing on the register yet.</p>`));
+  else { equipListEl = list(s.equipment.map(e => equipCard(e, onEquipmentChanged, expandedIds))); app.append(equipListEl); }
+
+  // logs
+  app.append($(`<div class="hd">Recent entries</div>`));
+  if (!s.logs.length) app.append($(`<p class="note">Nothing logged against this site yet.</p>`));
+  else app.append(list(s.logs.slice(0,10).map(logCard)));
+
+  // delete — owner only, and only once, with a confirmation the user has to mean
+  if (me.role === "owner") {
+    app.append($(`<div class="hd">Danger zone</div>`));
+    const del = $(`<button class="btn danger">Delete this site</button>`);
+    del.onclick = async () => {
+      if (!confirm(`Delete "${s.name}" for good? Its stages, equipment, readings and logs go with it. This can't be undone.`)) return;
+      del.disabled = true;
+      try {
+        await api(`/api/sites/${s.id}`, { method: "DELETE" });
+        view = "sites"; siteId = null; await boot();
+      } catch (e) { err(e.message); del.disabled = false; }
+    };
+    app.append(del);
+  }
+}
+
+function readingForm(s) {
+  const box = $(`<div class="card"></div>`), vals = {};
+  box.append($(`<label>Date taken</label>`));
+  const d = $(`<input type="date" value="${today()}">`); box.append(d);
+  s.reading_defs.forEach(def => {
+    const range = (def.min != null || def.max != null) ? ` (expected ${def.min ?? "–"}–${def.max ?? "–"})` : "";
+    box.append($(`<label>${esc(def.label)} — ${esc(def.unit)}${range}</label>`));
+    const i = $(`<input inputmode="decimal" placeholder="leave blank to skip">`);
+    i.oninput = e => vals[def.key] = e.target.value; box.append(i);
+  });
+  if (s.equipment.length) {
+    box.append($(`<label>Equipment (optional)</label>`));
+    const sel = $(`<select><option value="">Not equipment-specific</option>${s.equipment.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join("")}</select>`);
+    sel.onchange = e => vals._equip = e.target.value; box.append(sel);
+  }
+  const save = $(`<button class="btn" style="margin-top:14px">Save readings</button>`);
+  save.onclick = async () => {
+    const readings = Object.keys(vals).filter(k => k[0] !== "_" && vals[k] !== "")
+      .map(k => ({ param:k, value:vals[k], equipment_id: vals._equip || null }));
+    if (!readings.length) return err("Enter at least one value.");
+    save.disabled = true;
+    try {
+      const r = await api(`/api/sites/${s.id}/readings`, { method:"POST", body:{ taken_on:d.value, readings } });
+      const flagged = r.filter(x => x.taken_on === d.value && x.flagged).length;
+      render();
+      if (flagged) setTimeout(() => err(`${flagged} reading${flagged>1?"s are":" is"} outside the expected range — it will appear in your next update.`), 60);
+    } catch (e) { err(e.message); save.disabled = false; }
+  };
+  box.append(save);
+  return box;
+}
+
+// expandedIds (a Set of equipment ids) remembers which checklists are open across
+// in-place refreshes — otherwise every checkbox tick would snap them shut again.
+function equipCard(e, onUpdated, expandedIds) {
+  const hasStages = e.stages.length > 0;
+  const chip = e.status === "overdue" ? `<span class="chip alert">overdue</span>`
+    : e.status === "due_soon" ? `<span class="chip warn">due soon</span>` : `<span class="chip ok">ok</span>`;
+  const card = $(`<div class="item${hasStages?" tap":""}"><div class="row" style="align-items:flex-start"></div></div>`);
+  const row = card.firstChild;
+  const left = $(`<div class="row" style="gap:11px;align-items:flex-start"></div>`);
+  const box = $(`<button type="button" class="box ${e.checked?"on":""}" style="margin-top:2px" aria-label="Checked present and working">${e.checked?"✓":""}</button>`);
+  if (me.role === "officer") box.disabled = true;
+  else box.onclick = async (ev) => {
+    ev.stopPropagation();
+    try {
+      const fresh = await api(`/api/equipment/${e.id}/check`, { method:"POST", body:{ checked: !e.checked } });
+      onUpdated ? onUpdated(fresh) : render();
+    } catch (er) { err(er.message); }
+  };
+  const info = $(`<div>
+    <div class="name" style="font-size:14.5px">${esc(e.name)}</div>
+    <div class="meta">${[e.make,e.model,e.serial].filter(Boolean).map(esc).join(" · ") || "No details"}</div>
+    <div class="meta">${e.service_due ? "Service due " + esc(e.service_due) : "No service schedule"} · Calibration ${e.calibration_tracked ? (e.calibration_due ? "due " + esc(e.calibration_due) : "not set") : "N/A"}</div>
+    <div class="meta">${e.checked ? `Checked by ${esc(e.checked_by)} · ${esc(e.checked_at)}` : "Not checked yet"}</div>
+  </div>`);
+  left.append(box, info);
+  const right = $(`<div style="display:flex;align-items:center;gap:8px"></div>`);
+  right.insertAdjacentHTML("beforeend", chip);
+  const isOpen = hasStages && expandedIds && expandedIds.has(e.id);
+  const caret = hasStages ? $(`<span style="font-size:11px;color:var(--mist);display:inline-block;transition:transform .2s ease;transform:rotate(${isOpen?90:0}deg)">▸</span>`) : null;
+  if (caret) right.append(caret);
+  row.append(left, right);
+
+  if (hasStages) {
+    const panel = $(`<div style="margin-top:12px" ${isOpen?"":"hidden"}></div>`);
+    panel.append($(`<div class="row"><div class="meta">Commissioning</div><div class="meta">${e.percent}%</div></div>`));
+    panel.append($(trackHtml({ stages: e.stages, open_blockers: 0 })));
+    const stageList = $(`<div class="card flat" style="margin-top:8px"></div>`);
+    e.stages.forEach(st => {
+      const b = $(`<button class="stage"><span class="idx">${st.idx+1}</span>
+        <span class="box ${st.done?"on":""}">${st.done?"✓":""}</span>
+        <span class="txt">${esc(st.name)}${st.done&&st.done_by?`<div class="when">${esc(st.done_by)} · ${esc(st.done_at)}</div>`:""}</span></button>`);
+      if (me.role === "officer") b.disabled = true;
+      else b.onclick = async (ev) => {
+        ev.stopPropagation();
+        try {
+          const fresh = await api(`/api/equipment/${e.id}/stages/${st.idx}`, { method:"POST", body:{ done: !st.done } });
+          onUpdated ? onUpdated(fresh) : render();
+        } catch (er) { err(er.message); }
+      };
+      stageList.append(b);
+    });
+    panel.append(stageList);
+    card.append(panel);
+    card.onclick = () => {
+      panel.hidden = !panel.hidden;
+      caret.style.transform = `rotate(${panel.hidden?0:90}deg)`;
+      if (expandedIds) panel.hidden ? expandedIds.delete(e.id) : expandedIds.add(e.id);
+    };
+  }
+
+  if (me.role !== "officer") {
+    const b = $(`<button class="btn ghost slim" style="margin-top:10px">Mark serviced today</button>`);
+    b.onclick = async (ev) => {
+      ev.stopPropagation();
+      try { await api("/api/equipment/" + e.id, { method:"PATCH", body:{ last_service: today() } }); render(); }
+      catch (er) { err(er.message); }
+    };
+    card.append(b);
+  }
+  return card;
+}
+
+function equipForm(s) {
+  const box = $(`<div class="card"></div>`), f = {};
+  box.append($(`<p class="note">It'll arrive with ${s.type_label}'s commissioning checklist, ready to tick off.</p>`));
+  [["name","Equipment name"],["make","Make"],["model","Model"],["serial","Serial number"]].forEach(([k,l]) => {
+    box.append($(`<label>${l}</label>`));
+    const i = $(`<input>`);
+    if (k === "name" && s.equipment_suggestions.length) {
+      i.setAttribute("list", "equip-suggest");
+      box.append($(`<datalist id="equip-suggest">${s.equipment_suggestions.map(x=>`<option value="${esc(x)}">`).join("")}</datalist>`));
+    }
+    i.oninput = e => f[k] = e.target.value; box.append(i);
+  });
+  box.append($(`<label>Last serviced</label>`));
+  const ls = $(`<input type="date">`); ls.onchange = e => f.last_service = e.target.value; box.append(ls);
+  box.append($(`<label>Service interval (days)</label>`));
+  const si = $(`<input inputmode="numeric" placeholder="180">`); si.oninput = e => f.service_days = e.target.value; box.append(si);
+  if (s.tracks_calibration) {
+    box.append($(`<label>Calibration due</label>`));
+    const cd = $(`<input type="date">`); cd.onchange = e => f.calibration_due = e.target.value; box.append(cd);
+  } else {
+    box.append($(`<p class="note">Calibration: N/A for ${s.type_label} equipment.</p>`));
+  }
+  const save = $(`<button class="btn" style="margin-top:14px">Add to register</button>`);
+  save.onclick = async () => {
+    if (!f.name) return err("Give the equipment a name.");
+    save.disabled = true;
+    try { await api(`/api/sites/${s.id}/equipment`, { method:"POST", body:f }); render(); }
+    catch (e) { err(e.message); save.disabled = false; }
+  };
+  box.append(save);
+  return box;
+}
+
+/* ---------------- logs ---------------- */
+
+function logCard(l) {
+  const sev = l.severity !== "none" ? `<span class="chip ${l.severity==="blocker"?"alert":"warn"}">${l.severity==="blocker"?"Blocker":"Watch"}</span>` : "";
+  const card = $(`<div class="item">
+    <div class="row"><div class="name" style="font-size:14px">${esc(l.entry_date)}</div>${sev}</div>
+    <div class="meta">${esc(l.author)} · ${esc(l.site_name || "General")}${l.crew?" · "+l.crew+" on crew":""}${l.hours?" · "+l.hours+" hrs":""}</div>
+    <p class="body" style="margin:8px 0 0">${esc(l.work)}</p>
+    ${l.issue?`<p class="body" style="margin:8px 0 0;color:var(--alert)">${esc(l.issue)}</p>`:""}
+    ${l.photos.length?`<div class="thumbs">${l.photos.map(p=>`<img data-photo="${esc(p.filename)}" alt="Site photo">`).join("")}</div>`:""}</div>`);
+  card.querySelectorAll("img[data-photo]").forEach(loadPhoto);
+  if (l.severity === "blocker" && !l.resolved && me.role !== "officer") {
+    const b = $(`<button class="btn ghost slim" style="margin-top:10px">Mark blocker cleared</button>`);
+    b.onclick = async () => { await api(`/api/logs/${l.id}/resolve`, { method:"POST" }); await boot(); };
+    card.append(b);
+  }
+  return card;
+}
+
+async function loadPhoto(img) {
+  try {
+    const r = await fetch(`/api/photos/${encodeURIComponent(img.dataset.photo)}`, { headers: { Authorization: "Bearer " + token } });
+    if (r.ok) img.src = URL.createObjectURL(await r.blob());
+  } catch {}
+}
+
+function renderLogs() {
+  if (me.role !== "officer") {
+    const add = $(`<button class="btn">New entry</button>`);
+    add.onclick = () => add.replaceWith(logForm());
+    app.append(add);
+  }
+  if (!state.logs.length) app.append($(`<div class="empty">No entries yet. A short note each evening builds the record your officers read.</div>`));
+  else app.append(list(state.logs.map(logCard)));
+}
+
+function logForm() {
+  const box = $(`<div class="card"></div>`), fd = new FormData();
+  fd.set("entry_date", today()); fd.set("severity", "none");
+  box.append($(`<label>Date</label>`));
+  const d = $(`<input type="date" value="${today()}">`); d.onchange = e => fd.set("entry_date", e.target.value); box.append(d);
+  box.append($(`<label>Site</label>`));
+  const sel = $(`<select><option value="">General / not site-specific</option>${state.sites.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join("")}</select>`);
+  if (siteId) sel.value = siteId, fd.set("site_id", siteId);
+  sel.onchange = e => fd.set("site_id", e.target.value); box.append(sel);
+  box.append($(`<label>Work done</label>`));
+  const w = $(`<textarea placeholder="Mounted anemometer at 10m, guy wires tensioned."></textarea>`);
+  w.oninput = e => fd.set("work", e.target.value); box.append(w);
+  const sp = $(`<div class="split"></div>`);
+  const cw = $(`<div><label>People on crew</label></div>`); const c = $(`<input inputmode="numeric">`);
+  c.oninput = e => fd.set("crew", e.target.value); cw.append(c);
+  const hw = $(`<div><label>Hours</label></div>`); const h = $(`<input inputmode="decimal">`);
+  h.oninput = e => fd.set("hours", e.target.value); hw.append(h);
+  sp.append(cw, hw); box.append(sp);
+  box.append($(`<label>Anything holding work up?</label>`));
+  const sv = $(`<select><option value="none">No issue</option><option value="watch">Watch</option><option value="blocker">Blocker</option></select>`);
+  const iw = $(`<div hidden><label>Describe it</label></div>`);
+  const iss = $(`<textarea></textarea>`); iss.oninput = e => fd.set("issue", e.target.value); iw.append(iss);
+  sv.onchange = e => { fd.set("severity", e.target.value); iw.hidden = e.target.value === "none"; };
+  box.append(sv, iw);
+  box.append($(`<label>Photos</label>`));
+  const file = $(`<input type="file" accept="image/*" capture="environment" multiple>`);
+  file.onchange = () => { fd.delete("photos"); Array.from(file.files).slice(0,6).forEach(f => fd.append("photos", f)); };
+  box.append(file);
+  const save = $(`<button class="btn" style="margin-top:14px">Save entry</button>`);
+  save.onclick = async () => {
+    if (!fd.get("work")) return err("Describe the work done.");
+    save.disabled = true;
+    try { await api("/api/logs", { method:"POST", body:fd }); await boot(); }
+    catch (e) { err(e.message); save.disabled = false; }
+  };
+  box.append(save);
+  return box;
+}
+
+/* ---------------- equipment overview ---------------- */
+
+async function renderEquipment() {
+  const due = await api("/api/equipment/due");
+  app.append($(`<div class="hd">Service and calibration due</div>`));
+  if (!due.length) app.append($(`<div class="empty">Nothing due in the next 30 days across any site.</div>`));
+  else app.append(list(due.map(e => {
+    const card = equipCard(e);
+    card.querySelector(".meta").insertAdjacentHTML("beforebegin", `<div class="meta">${esc(e.site_name)}</div>`);
+    return card;
+  })));
+  const dl = $(`<button class="btn ghost" style="margin-top:12px">Download equipment register (CSV)</button>`);
+  dl.onclick = () => download("/api/export/equipment.csv", "equipment.csv");
+  app.append(dl);
+}
+
+async function download(url, name) {
+  const r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+  const u = URL.createObjectURL(await r.blob());
+  const a = document.createElement("a"); a.href = u; a.download = name; a.click();
+  URL.revokeObjectURL(u);
+}
+
+/* ---------------- reports ---------------- */
+
+async function renderReports() {
+  if (me.role !== "officer") {
+    const d = $(`<button class="btn">Draft an update</button>`);
+    d.onclick = async () => { const draft = await api("/api/reports/draft"); d.replaceWith(reportForm(draft)); };
+    app.append(d);
+  }
+  const sp = $(`<div class="split" style="margin-bottom:10px"></div>`);
+  const a = $(`<button class="btn ghost slim">Log CSV</button>`); a.onclick = () => download("/api/export/logs.csv","field-log.csv");
+  const b = $(`<button class="btn ghost slim">Readings CSV</button>`); b.onclick = () => download("/api/export/readings.csv","readings.csv");
+  sp.append(a,b); app.append(sp);
+
+  app.append($(`<div class="hd">Sent updates</div>`));
+  if (!state.reports.length) app.append($(`<p class="note">Nothing sent yet.</p>`));
+  else app.append(list(state.reports.map(r => {
+    const acked = r.recipients.filter(x => x.ack_at);
+    const card = $(`<div class="item">
+      <div class="row"><div class="name" style="font-size:14.5px">${esc(r.title)}</div>${acked.length?`<span class="chip ok">Seen</span>`:""}</div>
+      <div class="meta">${esc(r.author)} · ${esc(r.report_date)} · to ${r.recipients.map(x=>esc(x.name)).join(", ")||"no one"}</div>
+      <p class="body" style="margin-top:10px">${esc(r.body)}</p>
+      ${acked.map(x=>`<div class="meta" style="margin-top:10px;padding-left:10px;border-left:2px solid var(--line)"><strong style="color:var(--steel)">${esc(x.name)}</strong> acknowledged${x.ack_comment?": "+esc(x.ack_comment):"."}</div>`).join("")}</div>`);
+    const mine = r.recipients.find(x => x.user_id === me.id);
+    if (mine && !mine.ack_at) {
+      const i = $(`<input placeholder="Reply or instruction (optional)" style="margin-top:12px">`);
+      const ack = $(`<button class="btn warn" style="margin-top:8px">Acknowledge</button>`);
+      ack.onclick = async () => {
+        try { await api(`/api/reports/${r.id}/ack`, { method:"POST", body:{ comment:i.value } }); await boot(); }
+        catch (e) { err(e.message); }
+      };
+      card.append(i, ack);
+    }
+    return card;
+  })));
+}
+
+function reportForm(d) {
+  const box = $(`<div class="card"></div>`);
+  box.append($(`<label>Subject</label>`));
+  const t = $(`<input value="${esc(d.title)}">`); box.append(t);
+  box.append($(`<label>Update</label>`));
+  const b = $(`<textarea style="min-height:300px"></textarea>`); b.value = d.body; box.append(b);
+  box.append($(`<label>Send to</label>`));
+  const to = new Set();
+  state.users.filter(u => u.id !== me.id).forEach(u => {
+    const l = $(`<label style="display:flex;gap:9px;align-items:center;margin:8px 0"></label>`);
+    const cb = $(`<input type="checkbox" style="width:18px;height:18px">`);
+    if (u.role === "officer") { cb.checked = true; to.add(u.id); }
+    cb.onchange = e => e.target.checked ? to.add(u.id) : to.delete(u.id);
+    l.append(cb, $(`<span style="font-size:14px;color:var(--text)">${esc(u.name)} — ${ROLES[u.role]}</span>`));
+    box.append(l);
+  });
+  const send = $(`<button class="btn" style="margin-top:12px">Send update</button>`);
+  send.onclick = async () => {
+    send.disabled = true;
+    try {
+      const r = await api("/api/reports", { method:"POST", body:{ title:t.value, body:b.value, to:[...to], site_id: siteId } });
+      await boot();
+      if (!r.emailed && r.recipients) ok("Sent in the app. Email wasn't delivered — SMTP isn't configured on the server.");
+    } catch (e) { err(e.message); send.disabled = false; }
+  };
+  box.append(send);
+  return box;
+}
+
+/* ---------------- team ---------------- */
+
+function renderTeam() {
+  if (org.join_code) {
+    app.append($(`<div class="card"><div class="name" style="font-size:14px">Join code</div>
+      <p class="meta">Colleagues use this to create their own accounts in ${esc(org.name)}.</p>
+      <p style="font-size:20px;font-weight:600;letter-spacing:.04em;margin-top:8px">${esc(org.join_code)}</p></div>`));
+  }
+  app.append($(`<div class="hd">People</div>`));
+  app.append(list(state.users.map(u => {
+    const card = $(`<div class="item"><div class="row"><div>
+      <div class="name" style="font-size:14.5px">${esc(u.name)}${u.id===me.id?" (you)":""}</div>
+      <div class="meta">${esc(u.email)}${u.phone?" · "+esc(u.phone):""}</div></div></div></div>`);
+    const row = card.querySelector(".row");
+    if (me.role === "owner" && u.id !== me.id) {
+      const s = $(`<select style="width:150px;font-size:13px;padding:7px 8px">${Object.entries(ROLES).map(([k,v])=>`<option value="${k}">${v}</option>`).join("")}</select>`);
+      s.value = u.role;
+      s.onchange = async e => { await api(`/api/users/${u.id}/role`, { method:"PATCH", body:{ role:e.target.value } }); await boot(); };
+      row.append(s);
+    } else row.append($(`<span class="chip">${ROLES[u.role]}</span>`));
+    return card;
+  })));
+  const out = $(`<button class="btn ghost" style="margin-top:16px">Sign out</button>`);
+  out.onclick = () => { localStorage.removeItem("ft"); token=""; me=null; authScreen(); };
+  app.append(out);
+}
+
+/* ---------------- boot ---------------- */
+
+async function render() {
+  app.innerHTML = "";
+  chrome();
+  try {
+    if (view === "sites") renderSites();
+    else if (view === "site") await renderSite();
+    else if (view === "logs") renderLogs();
+    else if (view === "equipment") await renderEquipment();
+    else if (view === "reports") await renderReports();
+    else if (view === "team") renderTeam();
+  } catch (e) { err(e.message); }
+  window.scrollTo(0,0);
+}
+
+async function boot() {
+  try {
+    const m = await api("/api/me"); me = m.user; org = m.org;
+    if (!types.length) types = await api("/api/site-types");
+    const [sites, logs, reports, users] = await Promise.all([
+      api("/api/sites"), api("/api/logs"), api("/api/reports"), api("/api/users"),
+    ]);
+    state = { sites, logs, reports, users };
+    render();
+  } catch (e) {
+    token=""; me=null; localStorage.removeItem("ft"); authScreen();
+  }
+}
+
+if (token) boot(); else authScreen();
+</script>
+</body>
+</html>
