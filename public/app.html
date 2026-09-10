@@ -18,6 +18,10 @@
     font:400 15px/1.5 Inter,'Helvetica Neue',system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
   .wrap{max-width:600px;margin:0 auto;padding:0 16px 110px;position:relative;z-index:1}
   h1,h2,h3{margin:0;font-weight:600;letter-spacing:-.01em}
+  /* the app stays a single mobile-width column up to tablet size, then stretches
+     to use the extra room instead of sitting pinned in a narrow strip */
+  @media (min-width:820px){ .wrap{max-width:760px} header.top .in{max-width:760px} }
+  @media (min-width:1200px){ .wrap{max-width:880px} header.top .in{max-width:880px} }
 
   /* ambient depth behind the app — static, no drift, so it costs nothing on
      battery or a weak field connection; ties the app's look to the landing page */
@@ -56,11 +60,15 @@
   .item{display:block;width:100%;text-align:left;padding:14px;background:none;border:none;
     font:inherit;color:inherit;transition:background-color .15s ease,transform .15s ease}
   .item + .item{border-top:1px solid var(--line)}
-  .item.tap{cursor:pointer}
+  .item.tap{cursor:pointer;transition:background-color .15s ease,transform .18s ease,box-shadow .18s ease}
   .item.tap:hover{background:rgba(255,255,255,.03)}
   .item.tap:active{background:rgba(255,255,255,.05)}
   @media (hover:hover) and (pointer:fine){
     .card.tap:hover{transform:translateY(-2px);box-shadow:0 16px 32px -16px rgba(0,0,0,.75)}
+    /* a real 3D tilt, not just a lift — reserved for site cards, the one thing
+       on this screen that reads as a physical object rather than a data row */
+    .item.tap.site:hover{transform:perspective(700px) rotateX(2deg) rotateY(-2.5deg) translateY(-2px);
+      box-shadow:0 16px 30px -16px rgba(0,0,0,.7);position:relative;z-index:1}
   }
   .item.site{border-left:3px solid var(--general)}
   .item.site.agro{border-left-color:var(--agro)} .item.site.met{border-left-color:var(--met)}
@@ -127,12 +135,33 @@
     backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
     border-top:1px solid #263239;box-shadow:0 -12px 28px -18px rgba(0,0,0,.9);
     padding-bottom:env(safe-area-inset-bottom)}
-  nav.tabs button{position:relative;flex:1;background:none;border:none;color:#7C8F94;padding:13px 4px 11px;
-    font:inherit;font-size:11.5px;cursor:pointer;transition:color .2s ease}
-  nav.tabs button::after{content:"";position:absolute;left:50%;bottom:3px;width:4px;height:4px;
+  nav.tabs button{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+    background:none;border:none;color:#7C8F94;padding:9px 4px 10px;
+    font:inherit;font-size:11.5px;cursor:pointer;transition:color .2s ease,transform .15s ease}
+  nav.tabs button::after{content:"";position:absolute;left:50%;bottom:2px;width:4px;height:4px;
     border-radius:50%;background:#E8B33D;transform:translateX(-50%) scale(0);transition:transform .2s ease}
+  nav.tabs .tabicon{width:19px;height:19px}
   nav.tabs button.on{color:#E8B33D;font-weight:600}
+  nav.tabs button.on .tabicon{filter:drop-shadow(0 0 5px rgba(232,179,61,.55))}
   nav.tabs button.on::after{transform:translateX(-50%) scale(1)}
+  @media (hover:hover) and (pointer:fine){
+    nav.tabs button:hover{color:#B9C6C9}
+    nav.tabs button.on:hover{color:#E8B33D}
+  }
+  /* on wide screens the full-bleed mobile tab bar becomes a floating dock,
+     centred over the content it controls instead of stretched edge to edge */
+  @media (min-width:820px){
+    nav.tabs{left:50%;right:auto;transform:translateX(-50%);bottom:18px;max-width:520px;width:calc(100% - 40px);
+      border:1px solid var(--line);border-radius:16px;box-shadow:0 20px 40px -18px rgba(0,0,0,.8)}
+  }
+
+  /* per-site-type and equipment icon badges — tinted chip holding a line icon,
+     colour keyed to the same accent variables used across the app */
+  .ico-badge{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex-shrink:0;
+    background:color-mix(in srgb, var(--badge-c, var(--general)) 16%, transparent)}
+  .ico-badge svg{width:19px;height:19px;color:var(--badge-c, var(--general))}
+  .ico-badge.sm{width:26px;height:26px;border-radius:7px}
+  .ico-badge.sm svg{width:15px;height:15px}
 
   .chip{display:inline-block;font-size:11px;padding:3px 8px;border-radius:20px;background:var(--field);
     color:var(--steel);font-weight:500;box-shadow:inset 0 1px 2px rgba(0,0,0,.35)}
@@ -183,8 +212,33 @@ const app = document.getElementById("app");
 const today = () => new Date().toISOString().slice(0,10);
 const ROLES = { owner:"Account owner", lead:"Site lead", officer:"Senior officer", tech:"Technician" };
 
+// One line-icon per site accent, drawn in the same style as the landing page's
+// icons — a visual thread between the two, not just a shared colour.
+const SITE_ICON_PATHS = {
+  agro: `<path d="M3 21V10l5 3V10l5 3V10l5 3v8H3Z"/><path d="M9 21v-5h4v5"/><path d="M18 6V3h2v3"/>`,
+  poultry: `<path d="M9 4.5c.5-1 1.2-1.5 2-1.5M11 4.5c.4-.9 1-1.3 1.7-1.3M13 4.7c.4-.8.9-1.1 1.5-1.1"/><path d="M14.5 6c1.7 0 3 1.4 3 3 0 1-.5 1.8-1.2 2.3l1.9.6-.6 1.7-2-.3c.6 1.7.4 3.7-.7 5.3-1.7 2.5-5.3 3-7.6 1.1-2.1-1.8-2.4-5-.6-7.1.4-.5.9-.9 1.4-1.1-.6-.5-1-1.3-1-2.1 0-1.7 1.4-3 3-3 .5 0 1 .1 1.4.4.4-.5.9-.8 1.4-.9Z"/><circle cx="15.5" cy="8.3" r=".55" fill="currentColor" stroke="none"/><path d="M17.5 9.5l2.3-.7-.9 2.2"/>`,
+  met: `<path d="M7 16a4 4 0 1 1 1.2-7.8A5 5 0 0 1 18 10a3.5 3.5 0 0 1-.5 6.9H7Z"/><path d="M9 20l1-2M13 20l1-2M17 19l1-2"/>`,
+  petro: `<path d="M12 3s6 7.2 6 11.2a6 6 0 1 1-12 0C6 10.2 12 3 12 3Z"/>`,
+  cold: `<path d="M12 2v20M4.5 6.5l15 11M19.5 6.5l-15 11"/>`,
+  general: `<path d="M12 22s7-7.6 7-12A7 7 0 1 0 5 10c0 4.4 7 12 7 12Z"/><circle cx="12" cy="10" r="2.5"/>`,
+};
+const EQUIP_ICON_PATH = `<path d="M14.7 6.3a3.5 3.5 0 0 1-4.6 4.6L4 17l3 3 6.1-6.1a3.5 3.5 0 0 1 4.6-4.6l-2 2-1.7-.6-.6-1.7 2-2Z"/>`;
+const iconBadge = (accent, pathset, size = "") =>
+  `<span class="ico-badge ${size}" style="--badge-c:var(--${accent || "general"})">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${pathset}</svg>
+  </span>`;
+const siteIcon = (accent, size) => iconBadge(accent, SITE_ICON_PATHS[accent] || SITE_ICON_PATHS.general, size);
+
 // Cascading entrance for a freshly-rendered list — each row rises in a beat after the last.
-const riseIn = (el, i = 0) => { el.classList.add("rise"); el.style.animationDelay = Math.min(i, 12) * 30 + "ms"; return el; };
+// The class is dropped once the animation ends: its fill-mode otherwise pins the row's
+// transform to the keyframe's resting value forever, which silently wins over any later
+// hover transform (a tilt, a lift) regardless of that rule's specificity.
+const riseIn = (el, i = 0) => {
+  el.classList.add("rise");
+  el.style.animationDelay = Math.min(i, 12) * 30 + "ms";
+  el.addEventListener("animationend", () => el.classList.remove("rise"), { once: true });
+  return el;
+};
 // A single connected list (Sites/Log/Equipment/Updates/Team): one flat card holding .item rows.
 const list = (items) => { const l = $(`<div class="card flat"></div>`); items.forEach((el, i) => l.append(riseIn(el, i))); return l; };
 
@@ -283,10 +337,18 @@ function chrome() {
   back.hidden = view !== "site";
   back.onclick = () => { view = "sites"; siteId = null; render(); };
 
-  const tabs = [["sites","Sites"],["logs","Log"],["equipment","Equipment"],["reports","Updates"],["team","Team"]];
+  const tabs = [
+    ["sites","Sites",`<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>`],
+    ["logs","Log",`<path d="M5 4h14v16l-3-2-2 2-2-2-2 2-2-2-3 2Z"/><path d="M8 9h8M8 13h5"/>`],
+    ["equipment","Equipment",`<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9z"/><path d="m9 13 2 2 4-4"/>`],
+    ["reports","Updates",`<path d="M6 16v-5a6 6 0 1 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/>`],
+    ["team","Team",`<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 2.5-5 6-5s6 2 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16 14.2c2.5.3 4 1.8 4 4.3"/>`],
+  ];
   const nav = document.getElementById("tabs"); nav.innerHTML = "";
-  tabs.forEach(([id, label]) => {
-    const b = $(`<button class="${view === id || (id==="sites" && view==="site") ? "on":""}">${label}</button>`);
+  tabs.forEach(([id, label, icon]) => {
+    const b = $(`<button class="${view === id || (id==="sites" && view==="site") ? "on":""}">
+      <svg class="tabicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${icon}</svg>
+      <span>${label}</span></button>`);
     b.onclick = () => { view = id; siteId = null; render(); };
     nav.append(b);
   });
@@ -321,9 +383,12 @@ function renderSites() {
   if (!state.sites.length) app.append($(`<div class="empty">No sites yet. Add the first one, then add its equipment — each piece gets its own checklist and readings.</div>`));
   else app.append(list(state.sites.map(s => {
     const c = $(`<button class="item tap site ${s.accent}">
-      <div class="row"><div>
-        <div class="name">${esc(s.name)}</div>
-        <div class="meta">${esc(s.type_label)}${s.location ? " · " + esc(s.location) : ""}${s.status !== "active" ? " · " + s.status.replace("_"," ") : ""}</div>
+      <div class="row"><div class="row" style="justify-content:flex-start;gap:12px">
+        ${siteIcon(s.accent)}
+        <div>
+          <div class="name">${esc(s.name)}</div>
+          <div class="meta">${esc(s.type_label)}${s.location ? " · " + esc(s.location) : ""}${s.status !== "active" ? " · " + s.status.replace("_"," ") : ""}</div>
+        </div>
       </div><div class="num">${s.percent}%</div></div>
       ${equipTrackHtml(s)}
       <div class="meta" style="margin-top:8px">
@@ -490,8 +555,11 @@ function siteTypeBuilder(onCreated, onCancel) {
 async function renderSite() {
   const s = await api("/api/sites/" + siteId);
   const header = $(`<div class="card site ${s.accent}">
-    <div class="row"><div><h2 style="font-size:18px">${esc(s.name)}</h2>
-    <div class="meta">${esc(s.type_label)}${s.location ? " · " + esc(s.location) : ""}${s.client ? " · " + esc(s.client) : ""}</div>
+    <div class="row"><div class="row" style="justify-content:flex-start;gap:12px">
+      ${siteIcon(s.accent)}
+      <div><h2 style="font-size:18px">${esc(s.name)}</h2>
+      <div class="meta">${esc(s.type_label)}${s.location ? " · " + esc(s.location) : ""}${s.client ? " · " + esc(s.client) : ""}</div>
+      </div>
     </div><div class="num" style="font-size:17px">${s.percent}%</div></div>${equipTrackHtml(s)}</div>`);
   app.append(header);
   const percentEl = header.querySelector(".num");
