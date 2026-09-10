@@ -11,7 +11,7 @@
   :root{
     --ink:#000000; --card:#161A1B; --field:#0D0F10; --line:#2B3235;
     --text:#EDEFEE; --steel:#B7C0C2; --mist:#838F92;
-    --alert:#E2664A; --warn:#E3AC49; --ok:#4CAE7E;
+    --alert:#E2664A; --warn:#E3AC49; --ok:#4CAE7E; --accent:#E8B33D;
     --agro:#3FA372; --met:#4E9BDB; --petro:#E2914A; --cold:#63B4C9; --general:#8A97A0; --poultry:#C99A4A;
   }
   body{margin:0;background:var(--ink);color:var(--text);
@@ -168,6 +168,24 @@
   .chip.alert{background:#3A2018;color:var(--alert)}
   .chip.warn{background:#3A2E12;color:var(--warn)}
   .chip.ok{background:#123423;color:var(--ok)}
+
+  /* the Sites-tab overview — a radial progress ring plus the numbers that
+     matter across every site at once, not just the one you're looking at */
+  .dash{background:radial-gradient(120% 160% at 15% -20%,rgba(232,179,61,.12),transparent 60%),
+      linear-gradient(160deg,rgba(255,255,255,.035),rgba(255,255,255,0) 55%),var(--card)}
+  .dash-grid{display:flex;align-items:center;gap:18px}
+  .ring{width:84px;height:84px;border-radius:50%;flex-shrink:0;position:relative;display:grid;place-items:center;
+    background:conic-gradient(var(--accent) calc(var(--p, 0) * 3.6deg), var(--field) 0);
+    box-shadow:0 0 20px -6px rgba(232,179,61,.5)}
+  .ring::before{content:"";position:absolute;inset:8px;border-radius:50%;background:var(--card)}
+  .ring span{position:relative;z-index:1;font-size:18px;font-weight:700;color:#FCFCFA;font-variant-numeric:tabular-nums}
+  .dash-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:8px;margin-top:16px}
+  .dash-stat{background:var(--field);border-radius:9px;padding:9px 6px;text-align:center;
+    box-shadow:inset 0 1px 3px rgba(0,0,0,.4)}
+  .dash-stat .n{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums;color:#FCFCFA}
+  .dash-stat .l{font-size:10.5px;color:var(--mist);margin-top:2px}
+  .dash-stat.alert .n{color:var(--alert)} .dash-stat.warn .n{color:var(--warn)}
+  .dash-types{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
   .hd{font-size:12.5px;color:var(--steel);font-weight:600;margin:20px 0 8px;
     display:flex;justify-content:space-between;align-items:center}
   .err{background:#3A2018;color:var(--alert);border:1px solid #5A3226;border-radius:3px;
@@ -374,7 +392,46 @@ const equipTrackHtml = s => {
 
 /* ---------------- sites ---------------- */
 
+// A stats overview across every site at once — how far along things are,
+// where the trouble is, and what kinds of site make up this organisation.
+function dashboardCard() {
+  const sites = state.sites;
+  const total = sites.length;
+  const active = sites.filter(s => s.status === "active").length;
+  const avg = total ? Math.round(sites.reduce((t,s) => t + s.percent, 0) / total) : 0;
+  const blockers = sites.reduce((t,s) => t + (s.open_blockers || 0), 0);
+  let overdue = 0, dueSoon = 0;
+  sites.forEach(s => (s.equipment || []).forEach(e => {
+    if (e.status === "overdue") overdue++; else if (e.status === "due_soon") dueSoon++;
+  }));
+  const byAccent = {};
+  sites.forEach(s => { byAccent[s.accent] = (byAccent[s.accent] || 0) + 1; });
+
+  const stat = (n, label, tone = "") => `<div class="dash-stat ${tone}"><div class="n">${n}</div><div class="l">${label}</div></div>`;
+  const typeChip = (accent, count) => {
+    const t = types.find(x => x.accent === accent);
+    return `<span class="chip"><i style="display:inline-block;width:7px;height:7px;border-radius:50%;
+      background:var(--${accent});margin-right:6px;vertical-align:1px"></i>${esc(t ? t.label : accent)} · ${count}</span>`;
+  };
+
+  return $(`<div class="card dash">
+    <div class="dash-grid">
+      <div class="ring" style="--p:${avg}"><span>${avg}%</span></div>
+      <div><div class="name" style="font-size:15px">Overall progress</div>
+      <div class="meta">${active} active of ${total} site${total===1?"":"s"}</div></div>
+    </div>
+    <div class="dash-stats">
+      ${stat(total, "Sites")}${stat(active, "Active")}
+      ${stat(blockers, "Blockers", blockers ? "alert" : "")}
+      ${stat(overdue, "Overdue", overdue ? "alert" : "")}
+      ${stat(dueSoon, "Due soon", dueSoon ? "warn" : "")}
+    </div>
+    ${Object.keys(byAccent).length ? `<div class="dash-types">${Object.entries(byAccent).map(([a,c]) => typeChip(a,c)).join("")}</div>` : ""}
+  </div>`);
+}
+
 function renderSites() {
+  if (state.sites.length) app.append(riseIn(dashboardCard()));
   if (me.role === "owner" || me.role === "lead") {
     const add = $(`<button class="btn">Add a site</button>`);
     add.onclick = () => add.replaceWith(siteForm());
@@ -439,6 +496,12 @@ function siteForm() {
   [["location","Location"],["client","Client or owner"]].forEach(([k,l]) => {
     rest.append($(`<label>${l}</label>`));
     const i = $(`<input>`); i.oninput = e => f[k] = e.target.value; rest.append(i);
+  });
+  rest.append($(`<div class="hd" style="margin:16px 0 2px">Contact (optional)</div>`));
+  rest.append($(`<p class="note">Who to reach about this site — shown on the site page with a tap-to-call and tap-to-email.</p>`));
+  [["contact_name","Contact name","text"],["contact_phone","Phone","tel"],["contact_email","Email","email"]].forEach(([k,l,t]) => {
+    rest.append($(`<label>${l}</label>`));
+    const i = $(`<input type="${t}">`); i.oninput = e => f[k] = e.target.value; rest.append(i);
   });
   rest.append($(`<label>Start date</label>`));
   const d = $(`<input type="date" value="${today()}">`); d.onchange = e => f.start_date = e.target.value; rest.append(d);
@@ -552,6 +615,33 @@ function siteTypeBuilder(onCreated, onCancel) {
   return box;
 }
 
+// A site's contact may be a client, an owner, a site caretaker — whoever
+// picks up when there's a question about this specific site.
+const contactLineHtml = s => (s.contact_name || s.contact_phone || s.contact_email) ? `
+  <div class="meta" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+    ${s.contact_name ? `<span>${esc(s.contact_name)}</span>` : ""}
+    ${s.contact_phone ? `<a href="tel:${esc(s.contact_phone)}" style="color:var(--ok);font-weight:600">Call ${esc(s.contact_phone)}</a>` : ""}
+    ${s.contact_email ? `<a href="mailto:${esc(s.contact_email)}" style="color:var(--met);font-weight:600">Email</a>` : ""}
+  </div>` : "";
+
+function contactForm(s) {
+  const box = $(`<div class="card"></div>`);
+  const f = { contact_name: s.contact_name || "", contact_phone: s.contact_phone || "", contact_email: s.contact_email || "" };
+  box.append($(`<p class="note">Who to reach about ${esc(s.name)} — shown on the site page with a tap-to-call and tap-to-email.</p>`));
+  [["contact_name","Contact name","text"],["contact_phone","Phone","tel"],["contact_email","Email","email"]].forEach(([k,l,ty]) => {
+    box.append($(`<label>${l}</label>`));
+    const i = $(`<input type="${ty}" value="${esc(f[k])}">`); i.oninput = e => f[k] = e.target.value; box.append(i);
+  });
+  const save = $(`<button class="btn" style="margin-top:14px">Save contact</button>`);
+  save.onclick = async () => {
+    save.disabled = true;
+    try { await api(`/api/sites/${s.id}`, { method:"PATCH", body:f }); render(); }
+    catch (e) { err(e.message); save.disabled = false; }
+  };
+  box.append(save);
+  return box;
+}
+
 async function renderSite() {
   const s = await api("/api/sites/" + siteId);
   const header = $(`<div class="card site ${s.accent}">
@@ -559,10 +649,17 @@ async function renderSite() {
       ${siteIcon(s.accent)}
       <div><h2 style="font-size:18px">${esc(s.name)}</h2>
       <div class="meta">${esc(s.type_label)}${s.location ? " · " + esc(s.location) : ""}${s.client ? " · " + esc(s.client) : ""}</div>
+      ${contactLineHtml(s)}
       </div>
     </div><div class="num" style="font-size:17px">${s.percent}%</div></div>${equipTrackHtml(s)}</div>`);
   app.append(header);
   const percentEl = header.querySelector(".num");
+
+  if (me.role === "owner" || me.role === "lead") {
+    const editContact = $(`<button class="btn ghost slim" style="margin-top:10px">${s.contact_name||s.contact_phone||s.contact_email ? "Edit contact" : "+ Add contact info"}</button>`);
+    editContact.onclick = () => editContact.replaceWith(contactForm(s));
+    app.append(editContact);
+  }
 
   // Ticking a checkbox on a piece of equipment only needs the equipment
   // section (and this header's percent/track) to update — not the whole

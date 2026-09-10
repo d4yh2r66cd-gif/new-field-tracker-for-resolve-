@@ -21,12 +21,7 @@ const SITE_TYPES = {
       "Operator training",
       "Commissioned & handed over",
     ],
-    readings: [
-      { key: "throughput", label: "Throughput", unit: "kg/hr" },
-      { key: "moisture", label: "Product moisture", unit: "%", min: 8, max: 13 },
-      { key: "dryer_temp", label: "Dryer temperature", unit: "°C", min: 120, max: 180 },
-      { key: "current", label: "Line current draw", unit: "A" },
-    ],
+    readings: [],
     // Suggested names shown while adding equipment — a starting point, not a restriction.
     equipment: [
       "Cage-type Cleaner", "Paddle Boat Washer", "Peeler", "Grater", "Hydraulic Press",
@@ -52,12 +47,7 @@ const SITE_TYPES = {
       "Operator training",
       "Commissioned & handed over",
     ],
-    readings: [
-      { key: "throughput", label: "Throughput", unit: "birds/hr" },
-      { key: "scald_temp", label: "Scalder water temperature", unit: "°C", min: 50, max: 54 },
-      { key: "chiller_temp", label: "Chiller temperature", unit: "°C", min: 0, max: 4 },
-      { key: "line_speed", label: "Line speed", unit: "birds/min" },
-    ],
+    readings: [],
     equipment: [
       "Live Bird Receiving Cage", "Scalder", "Plucker", "Evisceration Table",
       "Giblet Harvester", "Chiller", "Cut-up Machine", "Deboning Machine",

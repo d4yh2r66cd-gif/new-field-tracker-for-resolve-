@@ -203,13 +203,19 @@ app.patch("/api/users/:id/role", auth, requireRole("owner"), (req, res) => {
 app.get("/api/sites", auth, (req, res) => res.json(listSites(req.org)));
 
 app.post("/api/sites", auth, requireRole("owner", "lead"), (req, res) => {
-  const { name, site_type, location, client, start_date } = req.body || {};
+  const { name, site_type, location, client, contact_name, contact_phone, contact_email, start_date } = req.body || {};
   if (!name) return res.status(400).json({ error: "Give the site a name." });
   const type = typeExists(req.org, site_type) ? site_type : "general";
 
   const id = db
-    .prepare("INSERT INTO sites (org_id, name, site_type, location, client, start_date) VALUES (?,?,?,?,?,?)")
-    .run(req.org, name.trim(), type, location || "", client || "", start_date || todayStr()).lastInsertRowid;
+    .prepare(
+      `INSERT INTO sites (org_id, name, site_type, location, client, contact_name, contact_phone, contact_email, start_date)
+       VALUES (?,?,?,?,?,?,?,?,?)`
+    )
+    .run(
+      req.org, name.trim(), type, location || "", client || "",
+      contact_name || "", contact_phone || "", contact_email || "", start_date || todayStr()
+    ).lastInsertRowid;
 
   res.json(siteWithStages(req.org, id));
 });
@@ -228,10 +234,16 @@ app.get("/api/sites/:id", auth, ownSite, (req, res) => {
 app.patch("/api/sites/:id", auth, requireRole("owner", "lead"), ownSite, (req, res) => {
   const cur = db.prepare("SELECT * FROM sites WHERE id = ?").get(req.siteId);
   const b = req.body || {};
-  db.prepare("UPDATE sites SET name=?, location=?, client=?, status=? WHERE id=? AND org_id=?").run(
+  db.prepare(
+    `UPDATE sites SET name=?, location=?, client=?, contact_name=?, contact_phone=?, contact_email=?, status=?
+     WHERE id=? AND org_id=?`
+  ).run(
     b.name ?? cur.name,
     b.location ?? cur.location,
     b.client ?? cur.client,
+    b.contact_name ?? cur.contact_name,
+    b.contact_phone ?? cur.contact_phone,
+    b.contact_email ?? cur.contact_email,
     ["active", "on_hold", "complete"].includes(b.status) ? b.status : cur.status,
     req.siteId,
     req.org

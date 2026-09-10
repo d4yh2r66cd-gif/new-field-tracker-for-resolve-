@@ -32,15 +32,18 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE TABLE IF NOT EXISTS sites (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  org_id      INTEGER NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
-  name        TEXT NOT NULL,
-  site_type   TEXT NOT NULL DEFAULT 'general',
-  location    TEXT,
-  client      TEXT,
-  start_date  TEXT,
-  status      TEXT NOT NULL DEFAULT 'active',  -- active | on_hold | complete
-  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  org_id        INTEGER NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  name          TEXT NOT NULL,
+  site_type     TEXT NOT NULL DEFAULT 'general',
+  location      TEXT,
+  client        TEXT,
+  contact_name  TEXT,
+  contact_phone TEXT,
+  contact_email TEXT,
+  start_date    TEXT,
+  status        TEXT NOT NULL DEFAULT 'active',  -- active | on_hold | complete
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS equipment (
@@ -160,6 +163,16 @@ if (!equipCols.includes("checked")) {
     ALTER TABLE equipment ADD COLUMN checked INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE equipment ADD COLUMN checked_at TEXT;
     ALTER TABLE equipment ADD COLUMN checked_by TEXT;
+  `);
+}
+
+// Databases created before site contacts existed won't have these columns yet.
+const siteCols = db.prepare("PRAGMA table_info(sites)").all().map((c) => c.name);
+if (!siteCols.includes("contact_name")) {
+  db.exec(`
+    ALTER TABLE sites ADD COLUMN contact_name TEXT;
+    ALTER TABLE sites ADD COLUMN contact_phone TEXT;
+    ALTER TABLE sites ADD COLUMN contact_email TEXT;
   `);
 }
 
